@@ -39,6 +39,58 @@ def count_pdf_pages(pdf: Path) -> int:
     return len(re.findall(rb"/Type\s*/Page\b", data))
 
 
+def read_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
+
+
+def rendered_source_text(root: Path) -> str:
+    source_files = sorted((root / "chapters").glob("*.tex")) if (root / "chapters").exists() else []
+    return "\n".join(read_text(path) for path in source_files)
+
+
+def count_runs_with_flag(thesis: dict, flag: str) -> int:
+    count = 0
+    for block in thesis.get("source_blocks", []):
+        count += sum(1 for run in block.get("runs", []) if run.get(flag))
+    return count
+
+
+def source_quality_checks(root: Path) -> list[dict]:
+    checks = []
+    source_text = rendered_source_text(root)
+    thesis = read_json(root / "workspace/intermediate/thesis.json", default={})
+
+    resize_hits = re.findall(r"\\resizebox\s*\{\s*\\textwidth\s*\}\s*\{\s*!\s*\}", source_text)
+    checks.append(
+        {
+            "name": "source_table_resizebox_textwidth",
+            "status": "warning" if resize_hits else "passed",
+            "detail": f"{len(resize_hits)} unguarded textwidth resizebox occurrence(s).",
+        }
+    )
+
+    superscript_runs = count_runs_with_flag(thesis, "superscript")
+    rendered_superscripts = len(re.findall(r"\\textsuperscript\s*\{", source_text))
+    checks.append(
+        {
+            "name": "source_superscript_runs_rendered",
+            "status": "warning" if rendered_superscripts < superscript_runs else "passed",
+            "detail": f"{superscript_runs} superscript run(s); {rendered_superscripts} rendered marker(s).",
+        }
+    )
+
+    subscript_runs = count_runs_with_flag(thesis, "subscript")
+    rendered_subscripts = len(re.findall(r"\\textsubscript\s*\{", source_text))
+    checks.append(
+        {
+            "name": "source_subscript_runs_rendered",
+            "status": "warning" if rendered_subscripts < subscript_runs else "passed",
+            "detail": f"{subscript_runs} subscript run(s); {rendered_subscripts} rendered marker(s).",
+        }
+    )
+    return checks
+
+
 def qa(root: Path) -> dict:
     output_dir = root / "workspace/output"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -86,6 +138,7 @@ def qa(root: Path) -> dict:
     )
     unresolved = re.search(r"undefined references|Citation .* undefined|LaTeX Warning: Reference .* undefined|\?\?", logs + "\n" + text, flags=re.IGNORECASE)
     checks.append({"name": "unresolved_references", "status": "failed" if unresolved else "passed", "detail": unresolved.group(0) if unresolved else "none"})
+    checks.extend(source_quality_checks(root))
 
     failed = [check for check in checks if check["status"] == "failed"]
     warnings = [check for check in checks if check["status"] == "warning"]

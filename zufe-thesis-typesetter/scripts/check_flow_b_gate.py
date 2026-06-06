@@ -4,9 +4,28 @@
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 
 from common import FINAL_BLOCK_STATES, print_json, read_json
+
+
+def rendered_source_text(root: Path) -> str:
+    chapters = sorted((root / "chapters").glob("*.tex")) if (root / "chapters").exists() else []
+    return "\n".join(path.read_text(encoding="utf-8", errors="ignore") for path in chapters)
+
+
+def count_runs_with_flag(blocks: list[dict], flag: str) -> int:
+    count = 0
+    for block in blocks:
+        if block.get("status") != "rendered":
+            continue
+        count += sum(1 for run in block.get("runs", []) if run.get(flag))
+    return count
+
+
+def count_latex_command(source_text: str, command: str) -> int:
+    return len(re.findall(rf"\\{command}\s*\{{", source_text))
 
 
 def check(root: Path, thesis_path: Path) -> dict:
@@ -45,6 +64,33 @@ def check(root: Path, thesis_path: Path) -> dict:
     mainbody = root / "chapters/mainbody.tex"
     if mainbody.exists() and "\\input{chapters/" not in mainbody.read_text(encoding="utf-8", errors="ignore"):
         issues.append({"check": "chapter_order", "target": "chapters/mainbody.tex", "detail": "没有检测到章节 input。"})
+
+    source_text = rendered_source_text(root)
+    superscript_runs = count_runs_with_flag(blocks, "superscript")
+    rendered_superscripts = count_latex_command(source_text, "textsuperscript")
+    if rendered_superscripts < superscript_runs:
+        issues.append(
+            {
+                "check": "superscript_rendering",
+                "detail": f"{superscript_runs} 个已渲染 Word 上标 run，但章节源码只检测到 {rendered_superscripts} 个 \\textsuperscript。",
+            }
+        )
+    subscript_runs = count_runs_with_flag(blocks, "subscript")
+    rendered_subscripts = count_latex_command(source_text, "textsubscript")
+    if rendered_subscripts < subscript_runs:
+        issues.append(
+            {
+                "check": "subscript_rendering",
+                "detail": f"{subscript_runs} 个已渲染 Word 下标 run，但章节源码只检测到 {rendered_subscripts} 个 \\textsubscript。",
+            }
+        )
+    if re.search(r"\\resizebox\s*\{\s*\\textwidth\s*\}\s*\{\s*!\s*\}", source_text):
+        issues.append(
+            {
+                "check": "table_resizebox_textwidth",
+                "detail": "章节源码包含无条件 \\resizebox{\\textwidth}{!}，可能放大窄表并破坏字号。",
+            }
+        )
 
     status = "passed" if not issues else "blocked"
     return {

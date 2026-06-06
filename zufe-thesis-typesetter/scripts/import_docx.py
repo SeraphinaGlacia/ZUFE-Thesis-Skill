@@ -25,11 +25,17 @@ def paragraph_evidence(paragraph) -> dict:
     sizes = []
     bold_any = False
     italic_any = False
+    superscript_any = False
+    subscript_any = False
     for run in paragraph.runs:
         if run.bold:
             bold_any = True
         if run.italic:
             italic_any = True
+        if run.font.superscript:
+            superscript_any = True
+        if run.font.subscript:
+            subscript_any = True
         if run.font.size is not None:
             sizes.append(round(run.font.size.pt, 2))
     return {
@@ -37,9 +43,31 @@ def paragraph_evidence(paragraph) -> dict:
         "alignment": str(paragraph.alignment),
         "bold_any": bold_any,
         "italic_any": italic_any,
+        "superscript_any": superscript_any,
+        "subscript_any": subscript_any,
         "font_sizes_pt": sorted(set(sizes)),
         "run_count": len(paragraph.runs),
     }
+
+
+def run_payload(paragraph) -> list[dict]:
+    runs = []
+    for index, run in enumerate(paragraph.runs, start=1):
+        text = run.text
+        if not text:
+            continue
+        runs.append(
+            {
+                "index": index,
+                "text": text,
+                "bold": bool(run.bold),
+                "italic": bool(run.italic),
+                "superscript": bool(run.font.superscript),
+                "subscript": bool(run.font.subscript),
+                "font_size_pt": round(run.font.size.pt, 2) if run.font.size is not None else None,
+            }
+        )
+    return runs
 
 
 def table_payload(table) -> dict:
@@ -97,6 +125,7 @@ def extract(root: Path, docx_path: Path) -> dict:
                 "candidate_type": candidate_type,
                 "text": text,
                 "summary": block_summary(text),
+                "runs": run_payload(paragraph),
                 "evidence": paragraph_evidence(paragraph),
                 "target_slot": None,
                 "status": status,

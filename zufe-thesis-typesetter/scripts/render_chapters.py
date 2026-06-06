@@ -14,6 +14,102 @@ def tex_heading(text: str, command: str) -> str:
     return f"\\{command}{{{latex_escape(text)}}}"
 
 
+def formatted_run_to_latex(run: dict) -> str:
+    text = latex_escape(run.get("text") or "")
+    if not text:
+        return ""
+    if run.get("bold"):
+        text = f"\\textbf{{{text}}}"
+    if run.get("italic"):
+        text = f"\\textit{{{text}}}"
+    if run.get("superscript"):
+        text = f"\\textsuperscript{{{text}}}"
+    if run.get("subscript"):
+        text = f"\\textsubscript{{{text}}}"
+    return text
+
+
+def runs_to_latex(block: dict) -> str | None:
+    runs = block.get("runs") or []
+    if not runs:
+        return None
+    rendered = "".join(formatted_run_to_latex(run) for run in runs)
+    return rendered if rendered else None
+
+
+def table_needs_wrapping(rows: list[list[str]], col_count: int) -> bool:
+    if col_count > 4:
+        return True
+    for row in rows:
+        for cell in row:
+            text = str(cell or "")
+            if "\n" in text or len(text) > 24:
+                return True
+    return False
+
+
+def table_cell_to_latex(cell: str) -> str:
+    lines = [latex_escape(line.strip()) for line in str(cell or "").splitlines()]
+    lines = [line for line in lines if line]
+    return r"\newline ".join(lines)
+
+
+def table_column_spec(rows: list[list[str]], col_count: int) -> str:
+    if col_count <= 0:
+        return "l"
+    if not table_needs_wrapping(rows, col_count):
+        return "@{}" + ("l" * col_count) + "@{}"
+    if col_count == 1:
+        return r"@{}>{\raggedright\arraybackslash}p{0.90\textwidth}@{}"
+    if col_count == 2:
+        return (
+            r"@{}>{\raggedright\arraybackslash}p{0.44\textwidth}"
+            r">{\raggedright\arraybackslash}p{0.44\textwidth}@{}"
+        )
+    first_width = 0.30 if col_count <= 4 else 0.34
+    other_width = max(0.08, (0.92 - first_width) / (col_count - 1))
+    other = "".join(
+        rf">{{\raggedright\arraybackslash}}p{{{other_width:.2f}\textwidth}}"
+        for _ in range(col_count - 1)
+    )
+    return rf"@{{}}>{{\raggedright\arraybackslash}}p{{{first_width:.2f}\textwidth}}{other}@{{}}"
+
+
+def table_to_latex(block: dict) -> str:
+    rows = block.get("table", {}).get("rows", [])
+    if not rows:
+        return "% 空表格源块"
+    col_count = max((len(row) for row in rows), default=1)
+    body = []
+    for index, row in enumerate(rows):
+        padded = row + [""] * (col_count - len(row))
+        body.append("    " + " & ".join(table_cell_to_latex(cell) for cell in padded) + r" \\")
+        if index == 0 and len(rows) > 1:
+            body.append(r"    \midrule")
+
+    lines = [
+        r"\begin{table}[htbp]",
+        r"  \centering",
+    ]
+    if block.get("caption"):
+        lines.append(f"  \\caption{{{latex_escape(block['caption'])}}}")
+    lines.extend(
+        [
+            r"  \zihao{5}",
+            r"  \songti",
+            r"  \setlength{\tabcolsep}{3pt}",
+            r"  \renewcommand{\arraystretch}{1.18}",
+            f"  \\begin{{tabular}}{{{table_column_spec(rows, col_count)}}}",
+            r"    \toprule",
+            *body,
+            r"    \bottomrule",
+            r"  \end{tabular}",
+            r"\end{table}",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def block_to_latex(block: dict) -> str:
     if block.get("latex"):
         return str(block["latex"])
@@ -33,16 +129,7 @@ def block_to_latex(block: dict) -> str:
             ]
         )
     if block.get("source_type") == "table":
-        rows = block.get("table", {}).get("rows", [])
-        if not rows:
-            return "% 空表格源块"
-        col_count = max((len(row) for row in rows), default=1)
-        spec = "|".join(["l"] * col_count)
-        body = []
-        for row in rows:
-            padded = row + [""] * (col_count - len(row))
-            body.append(" & ".join(latex_escape(cell) for cell in padded) + r" \\")
-        return "\n".join([f"\\begin{{tabular}}{{{spec}}}", *body, "\\end{tabular}"])
+        return table_to_latex(block)
     if level == 1:
         return tex_heading(text, "chapter")
     if level == 2:
@@ -51,7 +138,7 @@ def block_to_latex(block: dict) -> str:
         return tex_heading(text, "subsection")
     if role == "heading":
         return tex_heading(text, "chapter")
-    return latex_escape(text) + "\n"
+    return (runs_to_latex(block) or latex_escape(text)) + "\n"
 
 
 def grouped_chapters(thesis: dict) -> list[dict]:
