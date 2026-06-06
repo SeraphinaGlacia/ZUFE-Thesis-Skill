@@ -7,7 +7,7 @@ import argparse
 from collections import defaultdict
 from pathlib import Path
 
-from common import latex_escape, now_iso, print_json, read_json, rel, write_json
+from common import latex_escape, now_iso, print_json, read_json, rel, safe_resolve_under, write_json
 
 
 def tex_heading(text: str, command: str) -> str:
@@ -181,9 +181,11 @@ def render(root: Path, thesis_path: Path, allow_incomplete: bool) -> dict:
         "",
     ]
     for chapter in grouped_chapters(thesis):
-        target = root / chapter["file"]
-        if not target.resolve().as_posix().startswith((root / "chapters").resolve().as_posix()):
-            return {"flow": "B", "step": "render_chapters", "status": "blocked", "error": f"不安全的章节路径：{chapter['file']}"}
+        try:
+            target = safe_resolve_under(root, chapter["file"], "chapters")
+        except ValueError as exc:
+            return {"flow": "B", "step": "render_chapters", "status": "blocked", "error": str(exc)}
+        target_rel = rel(target, root)
         lines = [f"% Generated chapter: {chapter.get('title', target.stem)}", ""]
         for block_id in chapter.get("block_ids", []):
             block = blocks_by_id.get(block_id)
@@ -193,11 +195,11 @@ def render(root: Path, thesis_path: Path, allow_incomplete: bool) -> dict:
             lines.append(block_to_latex(block))
             lines.append("")
             block["status"] = "rendered"
-            block["render_result"] = {"path": chapter["file"], "kind": "chapter_tex"}
+            block["render_result"] = {"path": target_rel, "kind": "chapter_tex"}
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("\n".join(lines), encoding="utf-8")
-        rendered_files.append(rel(target, root))
-        mainbody_lines.append(f"\\input{{{Path(chapter['file']).with_suffix('').as_posix()}}}")
+        rendered_files.append(target_rel)
+        mainbody_lines.append(f"\\input{{{Path(target_rel).with_suffix('').as_posix()}}}")
 
     mainbody_lines.extend(
         [
@@ -207,7 +209,7 @@ def render(root: Path, thesis_path: Path, allow_incomplete: bool) -> dict:
             "",
         ]
     )
-    mainbody = root / "chapters/mainbody.tex"
+    mainbody = safe_resolve_under(root, "chapters/mainbody.tex", "chapters")
     mainbody.write_text("\n".join(mainbody_lines), encoding="utf-8")
     thesis.setdefault("render_log", []).append(
         {

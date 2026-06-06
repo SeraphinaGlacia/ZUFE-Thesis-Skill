@@ -121,11 +121,7 @@ def qa(root: Path) -> dict:
             }
         )
 
-    source_text = "\n".join(
-        path.read_text(encoding="utf-8", errors="ignore")
-        for path in [root / "chapters/basicinfo.tex", root / "chapters/mainbody.tex"]
-        if path.exists()
-    )
+    source_text = rendered_source_text(root)
     combined = text + "\n" + source_text
     for pattern in PLACEHOLDER_PATTERNS:
         found = re.search(pattern, combined, flags=re.IGNORECASE) is not None

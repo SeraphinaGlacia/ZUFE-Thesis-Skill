@@ -65,6 +65,20 @@ def rel(path: Path, root: Path) -> str:
         return path.as_posix()
 
 
+def safe_resolve_under(root: Path, path: str | Path, allowed_dir: str | Path) -> Path:
+    """Resolve path and require it to stay under allowed_dir inside root."""
+    root = root.resolve()
+    allowed = Path(allowed_dir)
+    allowed_path = allowed.resolve() if allowed.is_absolute() else (root / allowed).resolve()
+    candidate = Path(path)
+    target = candidate.resolve() if candidate.is_absolute() else (root / candidate).resolve()
+    try:
+        target.relative_to(allowed_path)
+    except ValueError as exc:
+        raise ValueError(f"unsafe path outside {rel(allowed_path, root)}: {path}") from exc
+    return target
+
+
 def read_json(path: Path, default: Any | None = None) -> Any:
     if not path.exists():
         if default is not None:

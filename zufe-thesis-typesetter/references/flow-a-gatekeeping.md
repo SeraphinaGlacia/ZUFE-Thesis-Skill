@@ -58,6 +58,7 @@ workspace/input/thesis.docx
 
 - `report_style`
 - `thesis_title_cn`
+- `thesis_title_abs_cn`，可选，摘要页中文题目；缺省时模板回退使用 `thesis_title_cn`
 - `thesis_title_en`
 - `has_subtitle`
 - `thesis_subtitle_cn`

@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from common import latex_escape, load_metadata_yaml, metadata_bool, metadata_value, now_iso, print_json, read_json, rel, write_json
+from common import latex_escape, load_metadata_yaml, metadata_bool, metadata_value, now_iso, print_json, read_json, rel, safe_resolve_under, write_json
 
 
 def list_or_text(value) -> str:
@@ -25,6 +25,7 @@ def render(root: Path, metadata_path: Path, thesis_path: Path | None) -> dict:
     report_style = metadata_value(metadata, "report_style", default="0")
     has_subtitle = metadata_bool(metadata, "has_subtitle", default=False)
     title_cn = metadata_value(metadata, "thesis_title_cn", "title_cn", "title", default="")
+    title_abs_cn = metadata_value(metadata, "thesis_title_abs_cn", "title_abs_cn", "thesisTitleAbs", default="")
     title_en = metadata_value(metadata, "thesis_title_en", "title_en", default="")
     subtitle_cn = metadata_value(metadata, "thesis_subtitle_cn", "subtitle_cn", default="")
     subtitle_en = metadata_value(metadata, "thesis_subtitle_en", "subtitle_en", default="")
@@ -39,6 +40,7 @@ def render(root: Path, metadata_path: Path, thesis_path: Path | None) -> dict:
         f"\\newcommand{{\\reportStyle}}{{{latex_escape(report_style)}}}",
         "",
         f"\\newcommand{{\\thesisTitle}}{{{latex_escape(title_cn)}}}",
+        *([f"\\newcommand{{\\thesisTitleAbs}}{{{latex_escape(title_abs_cn)}}}"] if title_abs_cn else []),
         f"\\newcommand{{\\thesisTitleEN}}{{{latex_escape(title_en)}}}",
         "",
         "\\haveSub{}" if has_subtitle else "% \\haveSub{}",
@@ -63,7 +65,7 @@ def render(root: Path, metadata_path: Path, thesis_path: Path | None) -> dict:
         f"\\newcommand{{\\keywordsEN}}{{{latex_escape(list_or_text(keywords_en))}}}",
         "",
     ]
-    target = root / "chapters/basicinfo.tex"
+    target = safe_resolve_under(root, "chapters/basicinfo.tex", "chapters")
     target.write_text("\n".join(lines), encoding="utf-8")
 
     if thesis_path and thesis_path.exists():

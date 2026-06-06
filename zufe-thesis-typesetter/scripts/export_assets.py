@@ -8,18 +8,18 @@ import shutil
 import zipfile
 from pathlib import Path
 
-from common import print_json, read_json, rel, write_json
+from common import print_json, read_json, rel, safe_resolve_under, write_json
 
 
 def export_assets(root: Path, docx_path: Path, thesis_path: Path) -> dict:
-    output_dir = root / "Images/word_media"
+    output_dir = safe_resolve_under(root, "Images/word_media", "Images")
     output_dir.mkdir(parents=True, exist_ok=True)
     extracted = []
     with zipfile.ZipFile(docx_path) as archive:
         for name in archive.namelist():
             if not name.startswith("word/media/") or name.endswith("/"):
                 continue
-            target = output_dir / Path(name).name
+            target = safe_resolve_under(root, output_dir / Path(name).name, "Images")
             with archive.open(name) as source, target.open("wb") as destination:
                 shutil.copyfileobj(source, destination)
             extracted.append({"docx_media_path": name, "output": rel(target, root)})

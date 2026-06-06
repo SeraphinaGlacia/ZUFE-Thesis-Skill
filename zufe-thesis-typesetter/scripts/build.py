@@ -13,10 +13,10 @@ from common import BUILD_TEMP_FILES, archive_path, now_iso, print_json, rel, wri
 
 
 COMPILE_CHAIN = [
-    ["xelatex", "main.tex"],
+    ["xelatex", "-interaction=nonstopmode", "-halt-on-error", "-file-line-error", "main.tex"],
     ["biber", "main"],
-    ["xelatex", "main.tex"],
-    ["xelatex", "main.tex"],
+    ["xelatex", "-interaction=nonstopmode", "-halt-on-error", "-file-line-error", "main.tex"],
+    ["xelatex", "-interaction=nonstopmode", "-halt-on-error", "-file-line-error", "main.tex"],
 ]
 
 
