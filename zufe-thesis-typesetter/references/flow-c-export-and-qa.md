@@ -66,6 +66,8 @@ xelatex main.tex
 - 没有未解析引用或问号引用。
 - 参考文献信号存在。
 - 目录、摘要、正文和参考文献信号存在。
+- 若 `thesis.json` 记录了上标 run，章节源码中应存在对应 `\textsuperscript{...}` 渲染信号。
+- 章节源码中不得出现无条件 `\resizebox{\textwidth}{!}` 表格缩放风险；出现时最终状态至少应为 `needs_review`。
 - 没有模板蓝字说明或明显占位符，例如 `xx`、`xxxxxxxxxxxx`、`本文……`、`20xx`、`xxx`。
 - `workspace/output/report.md` 和 `workspace/output/qa_report.md` 存在。
 

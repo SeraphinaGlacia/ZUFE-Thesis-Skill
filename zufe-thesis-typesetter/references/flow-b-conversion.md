@@ -22,6 +22,7 @@ workspace/input/metadata.yaml
 - 原始类型或候选类型。
 - 文本或内容摘要。
 - 抽取证据，例如样式、加粗、字号、对齐、编号、表格形状、图片路径和原始位置。
+- 段落 run 级证据，例如 `bold`、`italic`、`superscript`、`subscript` 和 `font_size_pt`。
 - 目标槽位。
 - 当前状态。
 - 置信度。
@@ -69,6 +70,25 @@ workspace/input/metadata.yaml
 
 脚本不得编造参考文献，不得静默丢弃表格、图片或公式，也不得在低置信度时擅自猜测章节归属。
 
+## 角标与引用
+
+Word 段落中上标、下标是可见格式，属于必须保留的内容证据。
+
+- `import_docx.py` 必须记录非空 run，不能只保存 `paragraph.text`。
+- `render_chapters.py` 必须把上标 run 渲染为 `\textsuperscript{...}`，把下标 run 渲染为 `\textsubscript{...}`。
+- 数字上标若疑似参考文献引用，Codex 可以在确认参考条目映射后改为引用命令；没有确认时，保留视觉上标是最低要求。
+- QA 若发现 `thesis.json` 中存在上标 run，但章节源码没有对应 `\textsuperscript`，应给出风险提示。
+
+## 表格字号与缩放
+
+表格排版以模板稳定性为先，不以填满版心为目标。
+
+- 默认表格字号使用 `\zihao{5}` 和 `\songti`，接近模板示例。
+- 默认不得使用 `\resizebox{\textwidth}{!}{...}`。这个命令会同时放大较窄表格和字体，属于风险模式。
+- 优先使用固定字号、合理列宽、`tabular`/`tabular*`、`p{...}` 列和换行。
+- 只有确认表格自然宽度超出版心时，才允许缩小；不得放大。
+- 表格单元格中的 Word 换行应转为 LaTeX 可见换行，例如 `\newline`，不能默默合并导致标题和正文粘连。
+
 ## 完成门禁
 
 进入流程 C 前，运行 `scripts/check_flow_b_gate.py`。只有满足以下条件，流程 B 才通过：
@@ -79,5 +99,7 @@ workspace/input/metadata.yaml
 - 低置信度结构问题有确认记录。
 - 没有正文段落处于章节归属不明状态。
 - 没有图片、表格、公式或参考文献处于已抽取但未放置状态。
+- 没有 Word 上标/下标处于已抽取但未保留格式状态。
+- 没有默认表格被无条件整体缩放到 `\textwidth`。
 - 摘要和关键词冲突已解决。
 - `chapters/mainbody.tex` 中的章节输入顺序与确认后的结构一致。

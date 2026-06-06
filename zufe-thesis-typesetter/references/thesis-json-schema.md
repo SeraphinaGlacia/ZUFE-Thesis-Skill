@@ -35,11 +35,25 @@
   "source_type": "paragraph",
   "candidate_type": "body",
   "text": "原始文本",
+  "runs": [
+    {
+      "index": 1,
+      "text": "1",
+      "bold": false,
+      "italic": false,
+      "superscript": true,
+      "subscript": false,
+      "font_size_pt": 9.0
+    }
+  ],
   "summary": "短摘要",
   "evidence": {
     "style": "Normal",
     "alignment": "CENTER",
     "bold_any": false,
+    "italic_any": false,
+    "superscript_any": true,
+    "subscript_any": false,
     "font_sizes_pt": [12.0]
   },
   "target_slot": "chapters/1_introduction.tex",
@@ -65,6 +79,13 @@
 - `discarded_with_reason` 必须有 `discard_reason`。
 
 不要在没有用户确认原因的情况下，把高风险源块改成 `discarded_with_reason`。
+
+## Run 级格式规则
+
+- `text` 是便于检索和语义判断的纯文本；LaTeX 渲染不得只依赖 `text`。
+- 非空段落必须尽量写入 `runs`，记录 Word run 的 `bold`、`italic`、`superscript`、`subscript` 和 `font_size_pt`。
+- 若 `runs[].superscript=true`，渲染结果必须保留视觉上标，例如 `\textsuperscript{1}`。
+- 若上标数字实际是参考文献标号，Codex 可以在确认映射后改成引用命令；未确认前不得压平成普通数字。
 
 ## 目标槽位示例
 
