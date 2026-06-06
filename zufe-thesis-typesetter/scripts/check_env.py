@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+"""检查 Python DOCX 与 LaTeX/Biber 环境门禁。"""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import sys
+from pathlib import Path
+
+from common import command_exists, item, overall_status, print_json
+
+
+def check(stage: str) -> dict:
+    checks = [item("python", "passed", f"Python 可运行：{sys.executable}")]
+    if stage in {"minimal", "all"}:
+        if importlib.util.find_spec("docx") is None:
+            checks.append(
+                item(
+                    "python-docx",
+                    "blocked",
+                    "缺少 python-docx，无法预扫描和抽取 DOCX。",
+                    install_hint="python3 -m pip install python-docx",
+                )
+            )
+        else:
+            checks.append(item("python-docx", "passed", "python-docx 可导入。"))
+    if stage in {"latex", "all"}:
+        for command in ("xelatex", "biber"):
+            if command_exists(command):
+                checks.append(item(command, "passed", f"{command} 在 PATH 中。"))
+            else:
+                checks.append(
+                    item(
+                        command,
+                        "blocked",
+                        f"缺少 {command}，流程 C 无法编译。",
+                        install_hint="获得用户批准后安装完整 TeX Live 或 MacTeX。",
+                    )
+                )
+    status = overall_status(checks)
+    return {
+        "flow": "A",
+        "gate": f"environment_{stage}",
+        "status": status,
+        "checks": checks,
+        "next_steps": [] if status == "passed" else [
+            "向用户说明缺失依赖的影响。",
+            "Python 包或 LaTeX 发行版只能在用户明确批准后安装。",
+        ],
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--root", default=".", help="保持接口一致，当前脚本不读取该目录。")
+    parser.add_argument("--stage", choices=["minimal", "latex", "all"], default="all")
+    args = parser.parse_args()
+    Path(args.root).expanduser().resolve()
+    result = check(args.stage)
+    print_json(result)
+    return 0 if result["status"] == "passed" else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
