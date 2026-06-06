@@ -286,6 +286,92 @@ def test_check_env_reports_missing_required_latex_packages():
     assert result["status"] == "blocked"
 
 
+def test_prescan_reads_cover_table_metadata_without_report_style_default():
+    prescan_docx = load_module("prescan_docx")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        docx_path = root / "cover.docx"
+        document = Document()
+        document.add_paragraph("专业实践报告")
+        table = document.add_table(rows=4, cols=2)
+        rows = [
+            ("指导教师", "张老师"),
+            ("专业名称", "数字经济"),
+            ("学院", "经济学院"),
+            ("日期", "2026年6月"),
+        ]
+        for row, (label, value) in zip(table.rows, rows):
+            row.cells[0].text = label
+            row.cells[1].text = value
+        document.save(docx_path)
+
+        result = prescan_docx.prescan(root, docx_path)
+        candidates = result["metadata_candidates"]
+        assert candidates["report_style"] == "1"
+        assert candidates["mentor"] == "张老师"
+        assert candidates["major"] == "数字经济"
+        assert candidates["college"] == "经济学院"
+        assert candidates["date"] == "2026年6月"
+
+        assert prescan_docx.metadata_candidates(["普通论文标题"])["report_style"] == ""
+
+
+def test_render_basicinfo_blocks_missing_report_style():
+    render_basicinfo = load_module("render_basicinfo")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "chapters").mkdir()
+        metadata = root / "metadata.yaml"
+        metadata.write_text("thesis_title_cn: 测试题目\n", encoding="utf-8")
+
+        result = render_basicinfo.render(root, metadata, thesis_path=None)
+        assert result["status"] == "blocked"
+        assert "report_style" in result["missing_fields"]
+        assert not (root / "chapters/basicinfo.tex").exists()
+
+
+def test_render_basicinfo_blocks_unapproved_generated_english():
+    render_basicinfo = load_module("render_basicinfo")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "chapters").mkdir()
+        (root / "workspace/intermediate").mkdir(parents=True)
+        metadata = root / "metadata.yaml"
+        metadata.write_text(
+            "report_style: 1\n"
+            "thesis_title_cn: 测试题目\n",
+            encoding="utf-8",
+        )
+        thesis_path = root / "workspace/intermediate/thesis.json"
+        thesis_path.write_text(
+            json.dumps(
+                {
+                    "metadata": {
+                        "abstract_en": "Generated English abstract.",
+                        "keywords_en": ["generated", "keywords"],
+                        "english_content_source": "generated",
+                    }
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        result = render_basicinfo.render(root, metadata, thesis_path)
+        assert result["status"] == "blocked"
+        assert result["gate"] == "generated_english_requires_confirmation"
+        assert not (root / "chapters/basicinfo.tex").exists()
+
+        metadata.write_text(
+            "report_style: 1\n"
+            "thesis_title_cn: 测试题目\n"
+            "allow_generated_english: true\n",
+            encoding="utf-8",
+        )
+        result = render_basicinfo.render(root, metadata, thesis_path)
+        assert result["status"] == "passed"
+
+
 def test_qa_flags_bibtex_and_citation_lint_failures():
     qa = load_module("qa")
     with tempfile.TemporaryDirectory() as tmp:
@@ -361,6 +447,7 @@ def test_render_basicinfo_supports_thesis_title_abs():
         (root / "chapters").mkdir()
         metadata = root / "metadata.yaml"
         metadata.write_text(
+            "report_style: 1\n"
             "thesis_title_cn: 封面题目\n"
             "thesis_title_abs_cn: 摘要页题目\n",
             encoding="utf-8",
@@ -458,6 +545,9 @@ if __name__ == "__main__":
     test_import_docx_reports_unsupported_features()
     test_flow_b_gate_blocks_unconfirmed_unsupported_features()
     test_check_env_reports_missing_required_latex_packages()
+    test_prescan_reads_cover_table_metadata_without_report_style_default()
+    test_render_basicinfo_blocks_missing_report_style()
+    test_render_basicinfo_blocks_unapproved_generated_english()
     test_qa_flags_bibtex_and_citation_lint_failures()
     test_render_chapters_preserves_superscript_and_heading_levels()
     test_latex_escape_ascii_double_quotes_and_single_scan()

@@ -15,6 +15,20 @@ def list_or_text(value) -> str:
     return "" if value is None else str(value)
 
 
+def metadata_true(metadata: dict, key: str) -> bool:
+    return metadata_bool(metadata, key, default=False)
+
+
+def generated_english_requires_confirmation(thesis_meta: dict) -> bool:
+    source = str(thesis_meta.get("english_content_source") or "").strip().lower()
+    if source == "generated":
+        return True
+    generated = thesis_meta.get("generated_content") or []
+    if isinstance(generated, list) and any(str(item).startswith(("abstract_en", "keywords_en")) for item in generated):
+        return True
+    return bool(thesis_meta.get("abstract_en_generated") or thesis_meta.get("keywords_en_generated"))
+
+
 def render(root: Path, metadata_path: Path, thesis_path: Path | None) -> dict:
     metadata = load_metadata_yaml(metadata_path)
     thesis = read_json(thesis_path, default={}) if thesis_path and thesis_path.exists() else {}
@@ -22,7 +36,26 @@ def render(root: Path, metadata_path: Path, thesis_path: Path | None) -> dict:
     abstracts = thesis_meta.get("abstracts", {})
     keywords = thesis_meta.get("keywords", {})
 
-    report_style = metadata_value(metadata, "report_style", default="0")
+    report_style = metadata_value(metadata, "report_style", default="").strip()
+    if report_style not in {"0", "1"}:
+        return {
+            "flow": "B",
+            "step": "render_basicinfo",
+            "status": "blocked",
+            "gate": "metadata_required",
+            "missing_fields": ["report_style"],
+            "detail": "报告类型不能默认推断；必须由 Word 证据或用户确认 report_style=0/1。",
+            "next_steps": ["先回到流程 A 确认报告类型，再渲染 basicinfo.tex。"],
+        }
+    if generated_english_requires_confirmation(thesis_meta) and not metadata_true(metadata, "allow_generated_english"):
+        return {
+            "flow": "B",
+            "step": "render_basicinfo",
+            "status": "blocked",
+            "gate": "generated_english_requires_confirmation",
+            "detail": "英文摘要或英文关键词被标记为生成内容，但 metadata.yaml 未允许自动生成。",
+            "next_steps": ["向用户说明英文摘要/关键词属于内容性补写，并确认是否允许自动生成。"],
+        }
     has_subtitle = metadata_bool(metadata, "has_subtitle", default=False)
     title_cn = metadata_value(metadata, "thesis_title_cn", "title_cn", "title", default="")
     title_abs_cn = metadata_value(metadata, "thesis_title_abs_cn", "title_abs_cn", "thesisTitleAbs", default="")
@@ -102,7 +135,7 @@ def main() -> int:
     thesis_path = (root / args.thesis_json).resolve() if not Path(args.thesis_json).is_absolute() else Path(args.thesis_json).resolve()
     result = render(root, metadata_path, thesis_path)
     print_json(result)
-    return 0
+    return 0 if result["status"] == "passed" else 2
 
 
 if __name__ == "__main__":
