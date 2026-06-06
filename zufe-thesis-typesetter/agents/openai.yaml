@@ -1,0 +1,4 @@
+interface:
+  display_name: "ZUFE 论文排版助手"
+  short_description: "将 Word 论文转换为 ZUFE LaTeX 工程"
+  default_prompt: "使用 $zufe-thesis-typesetter 将我的 Word 论文转换为经过检查的 ZUFE-Thesis LaTeX/PDF 工程。"
