@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import base64
 import importlib.util
 import json
 import sys
@@ -16,6 +17,10 @@ SKILL_DIR = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = SKILL_DIR / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
+TINY_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+)
+
 
 def load_module(name: str):
     spec = importlib.util.spec_from_file_location(name, SCRIPTS_DIR / f"{name}.py")
@@ -23,6 +28,10 @@ def load_module(name: str):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def write_tiny_png(path: Path) -> None:
+    path.write_bytes(TINY_PNG)
 
 
 def test_import_docx_preserves_superscript_runs():
@@ -89,6 +98,63 @@ def test_latex_escape_ascii_double_quotes_and_single_scan():
     assert common.latex_escape("“中文引号”") == "“中文引号”"
     assert common.latex_escape("student's") == "student's"
     assert common.latex_escape(r"\alpha {x}") == r"\textbackslash{}alpha \{x\}"
+
+
+def test_import_docx_preserves_image_anchor_order():
+    import_docx = load_module("import_docx")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "workspace/input").mkdir(parents=True)
+        png = root / "anchor.png"
+        write_tiny_png(png)
+        document = Document()
+        document.add_paragraph("图片前段落")
+        document.add_picture(str(png))
+        document.add_paragraph("图片后段落")
+        docx_path = root / "workspace/input/thesis.docx"
+        document.save(docx_path)
+
+        import_docx.extract(root, docx_path)
+        thesis = json.loads((root / "workspace/intermediate/thesis.json").read_text(encoding="utf-8"))
+        blocks = thesis["source_blocks"]
+        before = next(block for block in blocks if block.get("text") == "图片前段落")
+        after = next(block for block in blocks if block.get("text") == "图片后段落")
+        image = next(block for block in blocks if block.get("source_type") == "image")
+
+        assert before["order"] < image["order"] < after["order"]
+        assert image["status"] == "needs_confirmation"
+        assert image["asset_status"] == "pending_export"
+        assert image["target_slot"] is None
+        assert image["evidence"]["docx_media_path"].startswith("word/media/")
+        assert image["evidence"]["anchor_paragraph_id"] == "p0002"
+
+
+def test_export_assets_does_not_mark_image_semantic_position_mapped():
+    import_docx = load_module("import_docx")
+    export_assets = load_module("export_assets")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "workspace/input").mkdir(parents=True)
+        png = root / "anchor.png"
+        write_tiny_png(png)
+        document = Document()
+        document.add_paragraph("图片前段落")
+        document.add_picture(str(png))
+        document.add_paragraph("图片后段落")
+        docx_path = root / "workspace/input/thesis.docx"
+        document.save(docx_path)
+
+        import_docx.extract(root, docx_path)
+        thesis_path = root / "workspace/intermediate/thesis.json"
+        export_assets.export_assets(root, docx_path, thesis_path)
+        thesis = json.loads(thesis_path.read_text(encoding="utf-8"))
+        image = next(block for block in thesis["source_blocks"] if block.get("source_type") == "image")
+
+        assert image["status"] == "needs_confirmation"
+        assert image["target_slot"] is None
+        assert image["asset_status"] == "exported"
+        assert image["asset_output"].startswith("Images/word_media/")
+        assert image["render_result"]["kind"] == "asset_extracted"
 
 
 def test_render_chapters_blocks_prefix_path_escape():
@@ -227,6 +293,8 @@ def test_qa_placeholder_scan_includes_generated_chapter_files():
 
 if __name__ == "__main__":
     test_import_docx_preserves_superscript_runs()
+    test_import_docx_preserves_image_anchor_order()
+    test_export_assets_does_not_mark_image_semantic_position_mapped()
     test_render_chapters_preserves_superscript_and_heading_levels()
     test_latex_escape_ascii_double_quotes_and_single_scan()
     test_render_chapters_blocks_prefix_path_escape()

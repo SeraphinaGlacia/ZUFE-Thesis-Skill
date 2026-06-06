@@ -10,6 +10,8 @@ from pathlib import Path
 from common import block_summary, classify_text, now_iso, print_json, rel, write_json
 from prescan_docx import metadata_candidates
 
+REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+
 
 def import_docx_libs():
     try:
@@ -70,6 +72,41 @@ def run_payload(paragraph) -> list[dict]:
     return runs
 
 
+def relationship_media_path(paragraph, relationship_id: str) -> str | None:
+    part = getattr(paragraph, "part", None)
+    related_parts = getattr(part, "related_parts", {}) if part is not None else {}
+    related = related_parts.get(relationship_id)
+    partname = getattr(related, "partname", None)
+    if partname is None:
+        return None
+    return str(partname).lstrip("/")
+
+
+def paragraph_image_refs(paragraph, paragraph_id: str, anchor_text: str) -> list[dict]:
+    refs = []
+    seen = set()
+    for blip in paragraph._element.xpath(".//*[local-name()='blip']"):
+        relationship_id = blip.get(f"{{{REL_NS}}}embed") or blip.get(f"{{{REL_NS}}}link")
+        if not relationship_id:
+            continue
+        media_path = relationship_media_path(paragraph, relationship_id)
+        if not media_path:
+            continue
+        key = (relationship_id, media_path)
+        if key in seen:
+            continue
+        seen.add(key)
+        refs.append(
+            {
+                "relationship_id": relationship_id,
+                "docx_media_path": media_path,
+                "anchor_paragraph_id": paragraph_id,
+                "anchor_text": block_summary(anchor_text),
+            }
+        )
+    return refs
+
+
 def table_payload(table) -> dict:
     rows = []
     for row in table.rows:
@@ -90,6 +127,30 @@ def media_entries(docx_path: Path) -> list[str]:
     return sorted(entries)
 
 
+def image_block(image_index: int, order: int, evidence: dict, *, anchored: bool) -> dict:
+    details = dict(evidence)
+    details["position"] = order
+    details["anchor_status"] = "anchored_in_body" if anchored else "unanchored_media_entry"
+    return {
+        "id": f"img{image_index:04d}",
+        "order": order,
+        "source_type": "image",
+        "candidate_type": "image",
+        "text": "",
+        "summary": details.get("docx_media_path", ""),
+        "evidence": details,
+        "target_slot": None,
+        "asset_status": "pending_export",
+        "asset_output": None,
+        "status": "needs_confirmation",
+        "confidence": 0.5 if anchored else 0.3,
+        "requires_confirmation": True,
+        "confirmation": None,
+        "discard_reason": None,
+        "render_result": None,
+    }
+
+
 def extract(root: Path, docx_path: Path) -> dict:
     docx, Paragraph, Table = import_docx_libs()
     document = docx.Document(str(docx_path))
@@ -98,15 +159,18 @@ def extract(root: Path, docx_path: Path) -> dict:
     paragraph_count = table_count = 0
     non_empty_texts = []
     order = 0
+    image_count = 0
+    anchored_media_paths = set()
 
     for child in document.element.body.iterchildren():
         tag = child.tag.rsplit("}", 1)[-1]
         if tag == "p":
             paragraph_count += 1
-            order += 1
+            paragraph_id = f"p{paragraph_count:04d}"
             paragraph = Paragraph(child, document)
             text = paragraph.text.strip()
             style = getattr(paragraph.style, "name", "")
+            image_refs = paragraph_image_refs(paragraph, paragraph_id, text)
             candidate_type, confidence = classify_text(text, style)
             if text:
                 non_empty_texts.append(text)
@@ -118,27 +182,42 @@ def extract(root: Path, docx_path: Path) -> dict:
                 status = "needs_confirmation"
                 requires_confirmation = True
                 discard_reason = None
-            block = {
-                "id": f"p{paragraph_count:04d}",
-                "order": order,
-                "source_type": "paragraph",
-                "candidate_type": candidate_type,
-                "text": text,
-                "summary": block_summary(text),
-                "runs": run_payload(paragraph),
-                "evidence": paragraph_evidence(paragraph),
-                "target_slot": None,
-                "status": status,
-                "confidence": confidence,
-                "requires_confirmation": requires_confirmation,
-                "confirmation": None,
-                "discard_reason": discard_reason,
-                "render_result": None,
-            }
-            blocks.append(block)
-            markdown.append(f"## {block['id']} [{candidate_type}] {status}")
-            markdown.append(block["summary"] or "(空)")
-            markdown.append("")
+            anchor_block_order = None
+            if text or not image_refs:
+                order += 1
+                anchor_block_order = order
+                block = {
+                    "id": paragraph_id,
+                    "order": order,
+                    "source_type": "paragraph",
+                    "candidate_type": candidate_type,
+                    "text": text,
+                    "summary": block_summary(text),
+                    "runs": run_payload(paragraph),
+                    "evidence": paragraph_evidence(paragraph),
+                    "target_slot": None,
+                    "status": status,
+                    "confidence": confidence,
+                    "requires_confirmation": requires_confirmation,
+                    "confirmation": None,
+                    "discard_reason": discard_reason,
+                    "render_result": None,
+                }
+                blocks.append(block)
+                markdown.append(f"## {block['id']} [{candidate_type}] {status}")
+                markdown.append(block["summary"] or "(空)")
+                markdown.append("")
+            for image_ref in image_refs:
+                order += 1
+                image_count += 1
+                if anchor_block_order is not None:
+                    image_ref["anchor_block_order"] = anchor_block_order
+                anchored_media_paths.add(image_ref["docx_media_path"])
+                block = image_block(image_count, order, image_ref, anchored=True)
+                blocks.append(block)
+                markdown.append(f"## {block['id']} [image] needs_confirmation")
+                markdown.append(f"{block['summary']} (anchor: {paragraph_id})")
+                markdown.append("")
         elif tag == "tbl":
             table_count += 1
             order += 1
@@ -166,25 +245,11 @@ def extract(root: Path, docx_path: Path) -> dict:
             markdown.append(block["summary"])
             markdown.append("")
 
-    image_entries = media_entries(docx_path)
-    for index, entry in enumerate(image_entries, start=1):
+    unanchored_images = [entry for entry in media_entries(docx_path) if entry not in anchored_media_paths]
+    for entry in unanchored_images:
         order += 1
-        block = {
-            "id": f"img{index:04d}",
-            "order": order,
-            "source_type": "image",
-            "candidate_type": "image",
-            "text": "",
-            "summary": entry,
-            "evidence": {"docx_media_path": entry},
-            "target_slot": None,
-            "status": "needs_confirmation",
-            "confidence": 0.3,
-            "requires_confirmation": True,
-            "confirmation": None,
-            "discard_reason": None,
-            "render_result": None,
-        }
+        image_count += 1
+        block = image_block(image_count, order, {"docx_media_path": entry}, anchored=False)
         blocks.append(block)
         markdown.append(f"## {block['id']} [image] needs_confirmation")
         markdown.append(entry)
@@ -198,7 +263,7 @@ def extract(root: Path, docx_path: Path) -> dict:
             "total_source_blocks": len(blocks),
             "paragraphs": paragraph_count,
             "tables": table_count,
-            "images": len(image_entries),
+            "images": image_count,
         },
         "metadata_candidates": metadata_candidates(non_empty_texts),
         "metadata": {},

@@ -29,11 +29,9 @@ def export_assets(root: Path, docx_path: Path, thesis_path: Path) -> dict:
     for block in thesis.get("source_blocks", []):
         media_path = block.get("evidence", {}).get("docx_media_path")
         if media_path in by_media:
-            block["target_slot"] = by_media[media_path]
             block["asset_output"] = by_media[media_path]
+            block["asset_status"] = "exported"
             block["render_result"] = {"path": by_media[media_path], "kind": "asset_extracted"}
-            if block.get("status") == "needs_confirmation":
-                block["status"] = "mapped"
     thesis.setdefault("render_log", []).append(
         {
             "step": "export_assets",

@@ -70,6 +70,15 @@ workspace/input/metadata.yaml
 
 脚本不得编造参考文献，不得静默丢弃表格、图片或公式，也不得在低置信度时擅自猜测章节归属。
 
+## 图片锚点与资源导出
+
+`import_docx.py` 必须尽量从段落 XML 中读取图片关系，把 image 源块插入 Word 正文原始位置，而不是把所有图片统一追加到文末。
+
+- image 源块必须记录 `evidence.docx_media_path`、锚点段落 ID、锚点文本摘要和锚点状态。
+- `export_assets.py` 只表示图片资源已复制到 `Images/word_media/`，应写入 `asset_status` 和 `asset_output`。
+- 资源已导出不等于语义位置已确认；不得仅因为图片文件导出成功就把 `status` 改成 `mapped`。
+- 无法定位正文锚点的媒体仍要进入清点账本，并保持 `needs_confirmation`。
+
 ## 角标与引用
 
 Word 段落中上标、下标是可见格式，属于必须保留的内容证据。

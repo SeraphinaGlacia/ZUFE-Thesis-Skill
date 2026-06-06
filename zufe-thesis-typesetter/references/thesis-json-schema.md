@@ -56,6 +56,8 @@
     "subscript_any": false,
     "font_sizes_pt": [12.0]
   },
+  "asset_status": null,
+  "asset_output": null,
   "target_slot": "chapters/1_introduction.tex",
   "status": "mapped",
   "confidence": 0.72,
@@ -86,6 +88,13 @@
 - 非空段落必须尽量写入 `runs`，记录 Word run 的 `bold`、`italic`、`superscript`、`subscript` 和 `font_size_pt`。
 - 若 `runs[].superscript=true`，渲染结果必须保留视觉上标，例如 `\textsuperscript{1}`。
 - 若上标数字实际是参考文献标号，Codex 可以在确认映射后改成引用命令；未确认前不得压平成普通数字。
+
+## 图片资源规则
+
+- image 源块的 `evidence.docx_media_path` 指向 DOCX 内部媒体路径，例如 `word/media/image1.png`。
+- 若图片来自正文段落锚点，`evidence.anchor_paragraph_id` 和 `evidence.anchor_text` 记录位置证据。
+- `asset_status=pending_export` 表示资源尚未复制；`asset_status=exported` 表示 `asset_output` 已指向 `Images/word_media/...`。
+- `asset_status=exported` 不代表图片语义位置已确认。图片仍需通过 `target_slot` 或章节结构确认放入哪个章节文件。
 
 ## 目标槽位示例
 
