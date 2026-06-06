@@ -8,6 +8,7 @@ import importlib.util
 import json
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 from docx import Document
@@ -32,6 +33,23 @@ def load_module(name: str):
 
 def write_tiny_png(path: Path) -> None:
     path.write_bytes(TINY_PNG)
+
+
+def rewrite_docx_xml(docx_path: Path, replacements: dict[str, str], additions: dict[str, str] | None = None) -> None:
+    original = docx_path.read_bytes()
+    with tempfile.TemporaryDirectory() as tmp:
+        original_zip = Path(tmp) / "original.docx"
+        rewritten_zip = Path(tmp) / "rewritten.docx"
+        original_zip.write_bytes(original)
+        with zipfile.ZipFile(original_zip, "r") as source, zipfile.ZipFile(rewritten_zip, "w") as target:
+            for info in source.infolist():
+                data = source.read(info.filename)
+                if info.filename in replacements:
+                    data = replacements[info.filename].encode("utf-8")
+                target.writestr(info, data)
+            for filename, text in (additions or {}).items():
+                target.writestr(filename, text.encode("utf-8"))
+        docx_path.write_bytes(rewritten_zip.read_bytes())
 
 
 def test_import_docx_preserves_superscript_runs():
@@ -155,6 +173,97 @@ def test_export_assets_does_not_mark_image_semantic_position_mapped():
         assert image["asset_status"] == "exported"
         assert image["asset_output"].startswith("Images/word_media/")
         assert image["render_result"]["kind"] == "asset_extracted"
+
+
+def test_import_docx_reports_unsupported_features():
+    import_docx = load_module("import_docx")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "workspace/input").mkdir(parents=True)
+        document = Document()
+        document.add_paragraph("正文段落")
+        docx_path = root / "workspace/input/thesis.docx"
+        document.save(docx_path)
+
+        with zipfile.ZipFile(docx_path) as archive:
+            document_xml = archive.read("word/document.xml").decode("utf-8")
+        insertion = (
+            '<w:p><w:hyperlink><w:r><w:t>链接文本</w:t></w:r></w:hyperlink></w:p>'
+            '<w:p><w:r><m:oMath><m:r><m:t>x=1</m:t></m:r></m:oMath></w:r></w:p>'
+            '<w:p><w:ins w:id="1" w:author="tester"><w:r><w:t>修订文本</w:t></w:r></w:ins></w:p>'
+            '<w:p><w:r><w:pict><v:textbox><w:txbxContent><w:p><w:r><w:t>文本框</w:t></w:r></w:p></w:txbxContent></v:textbox></w:pict></w:r></w:p>'
+        )
+        rewrite_docx_xml(
+            docx_path,
+            {"word/document.xml": document_xml.replace("<w:sectPr", insertion + "<w:sectPr", 1)},
+            {
+                "word/footnotes.xml": (
+                    '<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                    '<w:footnote w:id="1"><w:p><w:r><w:t>脚注</w:t></w:r></w:p></w:footnote>'
+                    "</w:footnotes>"
+                ),
+                "word/comments.xml": (
+                    '<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                    '<w:comment w:id="1"><w:p><w:r><w:t>批注</w:t></w:r></w:p></w:comment>'
+                    "</w:comments>"
+                ),
+                "word/header1.xml": (
+                    '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                    '<w:p><w:r><w:t>页眉</w:t></w:r></w:p></w:hdr>'
+                ),
+            },
+        )
+
+        import_docx.extract(root, docx_path)
+        thesis = json.loads((root / "workspace/intermediate/thesis.json").read_text(encoding="utf-8"))
+        features = {feature["type"]: feature for feature in thesis["unsupported_features"]}
+
+        assert features["hyperlink"]["count"] == 1
+        assert features["equation_omml"]["count"] == 1
+        assert features["tracked_changes"]["count"] == 1
+        assert features["textbox"]["count"] == 1
+        assert features["footnote_or_endnote"]["count"] == 1
+        assert features["comment"]["count"] == 1
+        assert features["header_footer"]["count"] == 1
+        for feature in features.values():
+            assert feature["status"] == "needs_confirmation"
+            assert feature["locations"]
+
+
+def test_flow_b_gate_blocks_unconfirmed_unsupported_features():
+    check_flow_b_gate = load_module("check_flow_b_gate")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "chapters").mkdir()
+        (root / "workspace/intermediate").mkdir(parents=True)
+        (root / "chapters/basicinfo.tex").write_text("基本信息\n", encoding="utf-8")
+        (root / "chapters/mainbody.tex").write_text("\\input{chapters/1_intro}\n", encoding="utf-8")
+        (root / "chapters/1_intro.tex").write_text("正文\n", encoding="utf-8")
+        (root / "Reference.bib").write_text("% empty\n", encoding="utf-8")
+        thesis_path = root / "workspace/intermediate/thesis.json"
+        thesis_path.write_text(
+            json.dumps(
+                {
+                    "counts": {"total_source_blocks": 0},
+                    "source_blocks": [],
+                    "unsupported_features": [
+                        {
+                            "type": "equation_omml",
+                            "count": 1,
+                            "severity": "high",
+                            "status": "needs_confirmation",
+                            "locations": [{"part": "word/document.xml", "count": 1}],
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        result = check_flow_b_gate.check(root, thesis_path)
+        assert result["status"] == "blocked"
+        assert any(issue["check"] == "unsupported_feature_confirmation" for issue in result["issues"])
 
 
 def test_render_chapters_blocks_prefix_path_escape():
@@ -295,6 +404,8 @@ if __name__ == "__main__":
     test_import_docx_preserves_superscript_runs()
     test_import_docx_preserves_image_anchor_order()
     test_export_assets_does_not_mark_image_semantic_position_mapped()
+    test_import_docx_reports_unsupported_features()
+    test_flow_b_gate_blocks_unconfirmed_unsupported_features()
     test_render_chapters_preserves_superscript_and_heading_levels()
     test_latex_escape_ascii_double_quotes_and_single_scan()
     test_render_chapters_blocks_prefix_path_escape()

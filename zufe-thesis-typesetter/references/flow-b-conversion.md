@@ -70,6 +70,14 @@ workspace/input/metadata.yaml
 
 脚本不得编造参考文献，不得静默丢弃表格、图片或公式，也不得在低置信度时擅自猜测章节归属。
 
+## 暂不支持特性报告
+
+`import_docx.py` 必须检测脚注、尾注、OMML 公式、超链接、批注、修订痕迹、文本框、页眉和页脚等暂不自动转换内容，并写入 `thesis.json.unsupported_features`。
+
+- 报告只记录类型、数量、位置和短摘要，不保存 XML、base64 或大段原文。
+- 默认状态为 `needs_confirmation`；用户或 Codex 明确处理后，可改为 `accepted_with_warning`、`confirmed` 或 `resolved`。
+- `check_flow_b_gate.py` 必须阻止未确认的 unsupported feature 进入流程 C。
+
 ## 图片锚点与资源导出
 
 `import_docx.py` 必须尽量从段落 XML 中读取图片关系，把 image 源块插入 Word 正文原始位置，而不是把所有图片统一追加到文末。

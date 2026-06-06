@@ -9,6 +9,8 @@ from pathlib import Path
 
 from common import FINAL_BLOCK_STATES, print_json, read_json
 
+ACCEPTED_UNSUPPORTED_FEATURE_STATUSES = {"accepted_with_warning", "confirmed", "resolved"}
+
 
 def rendered_source_text(root: Path) -> str:
     chapters = sorted((root / "chapters").glob("*.tex")) if (root / "chapters").exists() else []
@@ -36,6 +38,19 @@ def check(root: Path, thesis_path: Path) -> dict:
     expected = thesis.get("counts", {}).get("total_source_blocks")
     if expected != len(blocks):
         issues.append({"check": "source_block_count", "detail": f"账本记录 {expected} 个源块，实际找到 {len(blocks)} 个。"})
+
+    for feature in thesis.get("unsupported_features", []):
+        if not feature.get("count"):
+            continue
+        status = feature.get("status", "needs_confirmation")
+        if status not in ACCEPTED_UNSUPPORTED_FEATURE_STATUSES:
+            issues.append(
+                {
+                    "check": "unsupported_feature_confirmation",
+                    "feature_type": feature.get("type"),
+                    "detail": f"{feature.get('type')} 检测到 {feature.get('count')} 处，状态仍是 {status}。",
+                }
+            )
 
     for block in blocks:
         block_id = block.get("id")

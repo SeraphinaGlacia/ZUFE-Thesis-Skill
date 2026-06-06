@@ -5,12 +5,45 @@ from __future__ import annotations
 
 import argparse
 import zipfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from common import block_summary, classify_text, now_iso, print_json, rel, write_json
 from prescan_docx import metadata_candidates
 
 REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+UNSUPPORTED_FEATURES = {
+    "footnote_or_endnote": {
+        "severity": "high",
+        "summary": "检测到脚注或尾注，第一版不会自动转换脚注/尾注内容。",
+    },
+    "equation_omml": {
+        "severity": "high",
+        "summary": "检测到 Word OMML 公式，第一版不会自动转换公式。",
+    },
+    "textbox": {
+        "severity": "high",
+        "summary": "检测到文本框，第一版不会自动转换文本框内容。",
+    },
+    "tracked_changes": {
+        "severity": "high",
+        "summary": "检测到修订痕迹，必须先确认是否接受或拒绝修订。",
+    },
+    "comment": {
+        "severity": "medium",
+        "summary": "检测到批注，第一版不会把批注写入论文正文。",
+    },
+    "hyperlink": {
+        "severity": "medium",
+        "summary": "检测到超链接，第一版只保留可抽取文本，链接目标需要确认。",
+    },
+    "header_footer": {
+        "severity": "medium",
+        "summary": "检测到页眉或页脚，第一版不把页眉页脚当作正文自动转换。",
+    },
+}
 
 
 def import_docx_libs():
@@ -70,6 +103,109 @@ def run_payload(paragraph) -> list[dict]:
             }
         )
     return runs
+
+
+def local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def xml_parts(names: list[str]) -> list[str]:
+    return [
+        name
+        for name in names
+        if name.startswith("word/")
+        and name.endswith(".xml")
+        and not name.startswith("word/_rels/")
+        and name not in {"word/styles.xml", "word/settings.xml", "word/fontTable.xml"}
+    ]
+
+
+def xml_root(archive: zipfile.ZipFile, name: str) -> ET.Element | None:
+    try:
+        return ET.fromstring(archive.read(name))
+    except (KeyError, ET.ParseError):
+        return None
+
+
+def count_elements(
+    archive: zipfile.ZipFile,
+    part_names: list[str],
+    element_names: set[str],
+    *,
+    exclude_ids: set[str] | None = None,
+) -> tuple[int, list[dict]]:
+    total = 0
+    locations = []
+    for name in part_names:
+        root = xml_root(archive, name)
+        if root is None:
+            continue
+        count = 0
+        for element in root.iter():
+            if local_name(element.tag) not in element_names:
+                continue
+            element_id = element.attrib.get(f"{{{WORD_NS}}}id")
+            if exclude_ids and element_id in exclude_ids:
+                continue
+            count += 1
+        if count:
+            total += count
+            locations.append({"part": name, "count": count})
+    return total, locations
+
+
+def feature_entry(feature_type: str, count: int, locations: list[dict]) -> dict:
+    config = UNSUPPORTED_FEATURES[feature_type]
+    return {
+        "type": feature_type,
+        "count": count,
+        "severity": config["severity"],
+        "status": "needs_confirmation",
+        "summary": config["summary"],
+        "locations": locations[:20],
+    }
+
+
+def detect_unsupported_features(docx_path: Path) -> list[dict]:
+    features = []
+    with zipfile.ZipFile(docx_path) as archive:
+        names = archive.namelist()
+        parts = xml_parts(names)
+        document_parts = [name for name in parts if name.startswith(("word/document", "word/header", "word/footer"))]
+
+        checks = [
+            ("hyperlink", document_parts, {"hyperlink"}, None),
+            ("equation_omml", parts, {"oMath", "oMathPara"}, None),
+            ("textbox", parts, {"txbxContent"}, None),
+            ("tracked_changes", parts, {"ins", "del", "moveFrom", "moveTo"}, None),
+            ("comment", [name for name in parts if name == "word/comments.xml"], {"comment"}, None),
+            (
+                "footnote_or_endnote",
+                [name for name in parts if name in {"word/footnotes.xml", "word/endnotes.xml"}],
+                {"footnote", "endnote"},
+                {"-1", "0"},
+            ),
+        ]
+        for feature_type, part_names, element_names, exclude_ids in checks:
+            count, locations = count_elements(archive, part_names, element_names, exclude_ids=exclude_ids)
+            if count:
+                features.append(feature_entry(feature_type, count, locations))
+
+        header_footer_parts = [
+            name
+            for name in names
+            if (name.startswith("word/header") or name.startswith("word/footer"))
+            and name.endswith(".xml")
+        ]
+        if header_footer_parts:
+            features.append(
+                feature_entry(
+                    "header_footer",
+                    len(header_footer_parts),
+                    [{"part": name, "count": 1} for name in sorted(header_footer_parts)],
+                )
+            )
+    return features
 
 
 def relationship_media_path(paragraph, relationship_id: str) -> str | None:
@@ -161,6 +297,7 @@ def extract(root: Path, docx_path: Path) -> dict:
     order = 0
     image_count = 0
     anchored_media_paths = set()
+    unsupported_features = detect_unsupported_features(docx_path)
 
     for child in document.element.body.iterchildren():
         tag = child.tag.rsplit("}", 1)[-1]
@@ -264,14 +401,21 @@ def extract(root: Path, docx_path: Path) -> dict:
             "paragraphs": paragraph_count,
             "tables": table_count,
             "images": image_count,
+            "unsupported_features": sum(feature["count"] for feature in unsupported_features),
         },
         "metadata_candidates": metadata_candidates(non_empty_texts),
         "metadata": {},
         "structure": {"chapters": []},
+        "unsupported_features": unsupported_features,
         "source_blocks": blocks,
         "render_log": [],
         "warnings": [
             "初始抽取会把非空内容标记为 needs_confirmation，Codex 确认目标槽位后才能渲染。",
+            *(
+                ["检测到暂不自动转换的 Word 特性，必须确认或处理后才能通过流程 B。"]
+                if unsupported_features
+                else []
+            ),
         ],
     }
     intermediate = root / "workspace/intermediate"

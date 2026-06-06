@@ -13,13 +13,15 @@
     "total_source_blocks": 0,
     "paragraphs": 0,
     "tables": 0,
-    "images": 0
+    "images": 0,
+    "unsupported_features": 0
   },
   "metadata_candidates": {},
   "metadata": {},
   "structure": {
     "chapters": []
   },
+  "unsupported_features": [],
   "source_blocks": [],
   "render_log": [],
   "warnings": []
@@ -88,6 +90,23 @@
 - 非空段落必须尽量写入 `runs`，记录 Word run 的 `bold`、`italic`、`superscript`、`subscript` 和 `font_size_pt`。
 - 若 `runs[].superscript=true`，渲染结果必须保留视觉上标，例如 `\textsuperscript{1}`。
 - 若上标数字实际是参考文献标号，Codex 可以在确认映射后改成引用命令；未确认前不得压平成普通数字。
+
+## 暂不支持特性结构
+
+```json
+{
+  "type": "equation_omml",
+  "count": 1,
+  "severity": "high",
+  "status": "needs_confirmation",
+  "summary": "检测到 Word OMML 公式，第一版不会自动转换公式。",
+  "locations": [
+    {"part": "word/document.xml", "count": 1}
+  ]
+}
+```
+
+`status=needs_confirmation` 会阻止流程 B 完成。用户确认风险或完成补救后，可改为 `accepted_with_warning`、`confirmed` 或 `resolved`。
 
 ## 图片资源规则
 
