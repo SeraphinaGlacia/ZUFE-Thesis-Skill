@@ -7,7 +7,7 @@
 | 流程 | 名称 | 目标 | 详细文档 | 当前状态 |
 | --- | --- | --- | --- | --- |
 | A | 环境与输入确认 | 严格门禁与智能预准备，确保能安全进入转换 | `docs/development/workflows/flow-a-gatekeeping.md` | 已确认第一版 |
-| B | 转换与模糊确认 | 正式抽取 Word 内容，识别结构，处理低置信度内容 | `docs/development/workflows/flow-b-conversion.md` | 待细化 |
+| B | 转换与模糊确认 | 正式抽取 Word 内容，识别结构，处理低置信度内容 | `docs/development/workflows/flow-b-conversion.md` | 严谨性门槛已确认，细节继续细化 |
 | C | 编译、质检与导出 | 生成 LaTeX 工程和 PDF，诊断错误并交付结果 | `docs/development/workflows/flow-c-export-and-qa.md` | 待细化 |
 
 ## 流程关系
