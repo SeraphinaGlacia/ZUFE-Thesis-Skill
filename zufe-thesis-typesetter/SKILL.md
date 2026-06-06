@@ -55,7 +55,7 @@ workspace/output/qa_report.md
 
 - `scripts/check_template.py`：检查 ZUFE-Thesis 模板签名。
 - `scripts/prepare_workspace.py`：创建 `workspace/`，把 DOCX 放到标准路径，并可在用户批准后归档旧输出。
-- `scripts/check_env.py`：检查 Python、`python-docx`、`xelatex`、`biber`。
+- `scripts/check_env.py`：检查 Python、`python-docx`、`xelatex`、`biber` 和模板关键 TeX 包。
 - `scripts/prescan_docx.py`：流程 A 的 DOCX 轻量预扫描和 metadata 候选提取。不得生成正式 `thesis.json`。
 - `scripts/import_docx.py`：流程 B 正式抽取，生成 `thesis.json` 和 `extracted.md`。
 - `scripts/export_assets.py`：抽取 DOCX 媒体到 `Images/word_media/` 并记录证据。
@@ -65,7 +65,7 @@ workspace/output/qa_report.md
 - `scripts/check_flow_b_gate.py`：若仍有未处理、未确认或未渲染源块，则阻止流程 B 完成。
 - `scripts/build.py`：归档旧 `main.pdf`，清理临时编译文件，运行固定编译链。
 - `scripts/diagnose_build.py`：把构建失败分类为可行动问题。
-- `scripts/qa.py`：检查 PDF 新鲜度、文本、关键信号、未解析引用、模板残留和占位符。
+- `scripts/qa.py`：检查 PDF 新鲜度、文本、关键信号、未解析引用、BibTeX/引用闭环、模板残留和占位符。
 
 ## Codex 职责
 

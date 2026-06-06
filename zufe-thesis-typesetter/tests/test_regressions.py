@@ -266,6 +266,57 @@ def test_flow_b_gate_blocks_unconfirmed_unsupported_features():
         assert any(issue["check"] == "unsupported_feature_confirmation" for issue in result["issues"])
 
 
+def test_check_env_reports_missing_required_latex_packages():
+    check_env = load_module("check_env")
+    original_command_exists = check_env.command_exists
+    original_kpsewhich_exists = getattr(check_env, "kpsewhich_exists", None)
+    try:
+        check_env.command_exists = lambda _name: True
+        check_env.kpsewhich_exists = lambda filename: filename != "gb7714-2015.bbx"
+        result = check_env.check("latex")
+    finally:
+        check_env.command_exists = original_command_exists
+        if original_kpsewhich_exists is not None:
+            check_env.kpsewhich_exists = original_kpsewhich_exists
+
+    checks = {check["name"]: check for check in result["checks"]}
+    assert checks["tex_package_ctexbook.cls"]["status"] == "passed"
+    assert checks["tex_package_biblatex.sty"]["status"] == "passed"
+    assert checks["tex_package_gb7714-2015.bbx"]["status"] == "blocked"
+    assert result["status"] == "blocked"
+
+
+def test_qa_flags_bibtex_and_citation_lint_failures():
+    qa = load_module("qa")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "chapters").mkdir()
+        (root / "workspace/intermediate").mkdir(parents=True)
+        (root / "chapters/1_intro.tex").write_text(
+            r"正文引用 \cite{known,missing}。",
+            encoding="utf-8",
+        )
+        (root / "Reference.bib").write_text(
+            "@article{known,\n"
+            "  title={A}\n"
+            "}\n"
+            "@book{known,\n"
+            "  title={B}\n"
+            "}\n"
+            "@misc{broken,\n"
+            "  title={Broken}\n",
+            encoding="utf-8",
+        )
+        (root / "workspace/intermediate/thesis.json").write_text("{}", encoding="utf-8")
+
+        checks = {check["name"]: check for check in qa.source_quality_checks(root)}
+        assert checks["bibtex_duplicate_keys"]["status"] == "failed"
+        assert "known" in checks["bibtex_duplicate_keys"]["detail"]
+        assert checks["bibtex_braces_balanced"]["status"] == "failed"
+        assert checks["citation_keys_defined"]["status"] == "failed"
+        assert "missing" in checks["citation_keys_defined"]["detail"]
+
+
 def test_render_chapters_blocks_prefix_path_escape():
     render_chapters = load_module("render_chapters")
     with tempfile.TemporaryDirectory() as tmp:
@@ -406,6 +457,8 @@ if __name__ == "__main__":
     test_export_assets_does_not_mark_image_semantic_position_mapped()
     test_import_docx_reports_unsupported_features()
     test_flow_b_gate_blocks_unconfirmed_unsupported_features()
+    test_check_env_reports_missing_required_latex_packages()
+    test_qa_flags_bibtex_and_citation_lint_failures()
     test_render_chapters_preserves_superscript_and_heading_levels()
     test_latex_escape_ascii_double_quotes_and_single_scan()
     test_render_chapters_blocks_prefix_path_escape()

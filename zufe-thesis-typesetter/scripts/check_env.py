@@ -5,10 +5,29 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 
 from common import command_exists, item, overall_status, print_json
+
+REQUIRED_TEX_FILES = {
+    "ctexbook.cls": "ctexbook 是 ZUFE 模板的文档类基础。",
+    "biblatex.sty": "biblatex 是参考文献编译基础。",
+    "gb7714-2015.bbx": "gb7714-2015 是模板使用的国标参考文献样式。",
+}
+
+
+def kpsewhich_exists(filename: str) -> bool:
+    if not command_exists("kpsewhich"):
+        return False
+    process = subprocess.run(
+        ["kpsewhich", filename],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    return process.returncode == 0 and bool(process.stdout.strip())
 
 
 def check(stage: str) -> dict:
@@ -36,6 +55,18 @@ def check(stage: str) -> dict:
                         "blocked",
                         f"缺少 {command}，流程 C 无法编译。",
                         install_hint="获得用户批准后安装完整 TeX Live 或 MacTeX。",
+                    )
+                )
+        for filename, detail in REQUIRED_TEX_FILES.items():
+            if kpsewhich_exists(filename):
+                checks.append(item(f"tex_package_{filename}", "passed", f"{filename} 可由 kpsewhich 找到。"))
+            else:
+                checks.append(
+                    item(
+                        f"tex_package_{filename}",
+                        "blocked",
+                        f"缺少 {filename}：{detail}",
+                        install_hint="获得用户批准后使用 tlmgr 安装对应 TeX Live 包。",
                     )
                 )
     status = overall_status(checks)

@@ -26,6 +26,13 @@ KEY_SIGNALS = {
     "references": r"参考文献|References",
 }
 
+BIB_ENTRY_RE = re.compile(r"@\w+\s*\{\s*([^,\s]+)", flags=re.IGNORECASE)
+CITE_RE = re.compile(
+    r"\\(?:cite|supercite|parencite|textcite|autocite|citep|citet)"
+    r"(?:\s*\[[^\]]*\]){0,2}\s*\{([^}]+)\}",
+    flags=re.IGNORECASE,
+)
+
 
 def extract_text_with_pdftotext(pdf: Path) -> str:
     if shutil.which("pdftotext") is None:
@@ -53,6 +60,80 @@ def count_runs_with_flag(thesis: dict, flag: str) -> int:
     for block in thesis.get("source_blocks", []):
         count += sum(1 for run in block.get("runs", []) if run.get(flag))
     return count
+
+
+def bibtex_keys(bib_text: str) -> list[str]:
+    return [match.strip() for match in BIB_ENTRY_RE.findall(bib_text) if match.strip()]
+
+
+def duplicate_values(values: list[str]) -> list[str]:
+    seen = set()
+    duplicates = set()
+    for value in values:
+        if value in seen:
+            duplicates.add(value)
+        seen.add(value)
+    return sorted(duplicates)
+
+
+def braces_balanced(text: str) -> bool:
+    depth = 0
+    escaped = False
+    for char in text:
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth < 0:
+                return False
+    return depth == 0
+
+
+def cited_keys(source_text: str) -> list[str]:
+    keys = []
+    for group in CITE_RE.findall(source_text):
+        keys.extend(key.strip() for key in group.split(",") if key.strip())
+    return sorted(set(keys))
+
+
+def bibtex_quality_checks(root: Path, source_text: str) -> list[dict]:
+    checks = []
+    bib_text = read_text(root / "Reference.bib")
+    keys = bibtex_keys(bib_text)
+    duplicates = duplicate_values(keys)
+    checks.append(
+        {
+            "name": "bibtex_duplicate_keys",
+            "status": "failed" if duplicates else "passed",
+            "detail": ", ".join(duplicates) if duplicates else "none",
+        }
+    )
+
+    balanced = braces_balanced(bib_text)
+    checks.append(
+        {
+            "name": "bibtex_braces_balanced",
+            "status": "failed" if bib_text.strip() and not balanced else "passed",
+            "detail": "balanced" if balanced else "unbalanced braces",
+        }
+    )
+
+    cited = cited_keys(source_text)
+    missing = sorted(set(cited) - set(keys))
+    checks.append(
+        {
+            "name": "citation_keys_defined",
+            "status": "failed" if missing else "passed",
+            "detail": ", ".join(missing) if missing else "none",
+        }
+    )
+    return checks
 
 
 def source_quality_checks(root: Path) -> list[dict]:
@@ -88,6 +169,7 @@ def source_quality_checks(root: Path) -> list[dict]:
             "detail": f"{subscript_runs} subscript run(s); {rendered_subscripts} rendered marker(s).",
         }
     )
+    checks.extend(bibtex_quality_checks(root, source_text))
     return checks
 
 

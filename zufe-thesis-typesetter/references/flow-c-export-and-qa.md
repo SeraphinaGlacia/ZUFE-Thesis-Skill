@@ -65,6 +65,7 @@ xelatex -interaction=nonstopmode -halt-on-error -file-line-error main.tex
 - PDF 文本可读取。
 - 日志无严重编译错误。
 - 没有未解析引用或问号引用。
+- `Reference.bib` 没有重复 key 或明显大括号不平衡，正文 `\cite{...}` key 都能在 `Reference.bib` 中找到。
 - 参考文献信号存在。
 - 目录、摘要、正文和参考文献信号存在。
 - 若 `thesis.json` 记录了上标 run，章节源码中应存在对应 `\textsuperscript{...}` 渲染信号。

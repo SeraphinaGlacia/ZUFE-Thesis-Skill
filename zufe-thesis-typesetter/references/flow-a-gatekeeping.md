@@ -10,7 +10,7 @@
 4. 轻量预扫描 Word。
 5. 确认或补齐 `workspace/input/metadata.yaml`。
 6. 保护旧 `workspace/intermediate/` 和 `workspace/output/` 产物。
-7. 检查 `xelatex` 和 `biber`。
+7. 检查 `xelatex`、`biber` 和模板关键 TeX 包。
 
 ## 模板签名
 
