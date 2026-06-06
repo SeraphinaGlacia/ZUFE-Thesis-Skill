@@ -43,12 +43,14 @@ def block_to_latex(block: dict) -> str:
             padded = row + [""] * (col_count - len(row))
             body.append(" & ".join(latex_escape(cell) for cell in padded) + r" \\")
         return "\n".join([f"\\begin{{tabular}}{{{spec}}}", *body, "\\end{tabular}"])
-    if role == "heading" or level == 1:
+    if level == 1:
         return tex_heading(text, "chapter")
     if level == 2:
         return tex_heading(text, "section")
     if level == 3:
         return tex_heading(text, "subsection")
+    if role == "heading":
+        return tex_heading(text, "chapter")
     return latex_escape(text) + "\n"
 
 
