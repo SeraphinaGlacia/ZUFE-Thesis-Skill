@@ -105,6 +105,13 @@ Word 段落中上标、下标是可见格式，属于必须保留的内容证据
 - 中文智能引号 `“……”`、`‘……’` 默认保留，不要降级成 ASCII 引号。
 - raw LaTeX、引用命令、公式和图片路径不得套用正文引号转换。
 
+## PDF 链接边框
+
+`zufe.cls` 只在目录写入 `\hypersetup{hidelinks}`，不能保证正文图表引用或 URL 的 PDF 注释边框被隐藏。
+
+- `render_basicinfo.py` 必须在 `chapters/basicinfo.tex` 写入全局 `\hypersetup{hidelinks,pdfborder={0 0 0},pdfborderstyle={/S/U/W 0}}`。
+- 不要修改 `zufe.cls` 或依赖流程 C 手动修补；每次重新渲染 basicinfo 时都必须保留该设置。
+
 ## 英文摘要与关键词
 
 - 如果 Word 没有英文摘要或英文关键词，不得直接根据中文内容自动补写。

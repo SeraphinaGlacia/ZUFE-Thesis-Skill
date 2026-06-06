@@ -458,6 +458,18 @@ def test_render_basicinfo_supports_thesis_title_abs():
         assert "\\newcommand{\\thesisTitleAbs}{摘要页题目}" in basicinfo
 
 
+def test_render_basicinfo_hides_hyperref_link_borders():
+    render_basicinfo = load_module("render_basicinfo")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "chapters").mkdir()
+        metadata = root / "metadata.yaml"
+        metadata.write_text("report_style: 1\nthesis_title_cn: 测试题目\n", encoding="utf-8")
+        render_basicinfo.render(root, metadata, thesis_path=None)
+        basicinfo = (root / "chapters/basicinfo.tex").read_text(encoding="utf-8")
+        assert r"\hypersetup{hidelinks,pdfborder={0 0 0},pdfborderstyle={/S/U/W 0}}" in basicinfo
+
+
 def test_build_xelatex_uses_noninteractive_error_flags():
     build = load_module("build")
     xelatex_steps = [command for command in build.COMPILE_CHAIN if command[0] == "xelatex"]
@@ -553,6 +565,7 @@ if __name__ == "__main__":
     test_latex_escape_ascii_double_quotes_and_single_scan()
     test_render_chapters_blocks_prefix_path_escape()
     test_render_basicinfo_supports_thesis_title_abs()
+    test_render_basicinfo_hides_hyperref_link_borders()
     test_build_xelatex_uses_noninteractive_error_flags()
     test_render_chapters_table_uses_fixed_font_without_resizebox()
     test_qa_flags_missing_superscript_rendering_and_resizebox()
