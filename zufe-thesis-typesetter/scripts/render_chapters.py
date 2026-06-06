@@ -14,8 +14,8 @@ def tex_heading(text: str, command: str) -> str:
     return f"\\{command}{{{latex_escape(text)}}}"
 
 
-def formatted_run_to_latex(run: dict) -> str:
-    text = latex_escape(run.get("text") or "")
+def formatted_run_to_latex(run: dict, quote_state: dict[str, bool] | None = None) -> str:
+    text = latex_escape(run.get("text") or "", quote_state=quote_state)
     if not text:
         return ""
     if run.get("bold"):
@@ -33,7 +33,8 @@ def runs_to_latex(block: dict) -> str | None:
     runs = block.get("runs") or []
     if not runs:
         return None
-    rendered = "".join(formatted_run_to_latex(run) for run in runs)
+    quote_state = {"next_quote_is_opening": True}
+    rendered = "".join(formatted_run_to_latex(run, quote_state) for run in runs)
     return rendered if rendered else None
 
 
@@ -123,7 +124,7 @@ def block_to_latex(block: dict) -> str:
             [
                 "\\begin{figure}[htbp]",
                 "  \\centering",
-                f"  \\includegraphics[width=0.8\\textwidth]{{{latex_escape(path)}}}",
+                f"  \\includegraphics[width=0.8\\textwidth]{{{latex_escape(path, convert_quotes=False)}}}",
                 f"  \\caption{{{latex_escape(caption)}}}",
                 "\\end{figure}",
             ]

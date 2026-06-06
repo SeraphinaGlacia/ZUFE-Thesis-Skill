@@ -169,25 +169,43 @@ def metadata_bool(metadata: dict[str, Any], key: str, default: bool = False) -> 
     return default
 
 
-def latex_escape(text: Any) -> str:
+LATEX_SPECIAL_CHARS = {
+    "\\": r"\textbackslash{}",
+    "&": r"\&",
+    "%": r"\%",
+    "$": r"\$",
+    "#": r"\#",
+    "_": r"\_",
+    "{": r"\{",
+    "}": r"\}",
+    "~": r"\textasciitilde{}",
+    "^": r"\textasciicircum{}",
+}
+
+
+def latex_escape(
+    text: Any,
+    *,
+    convert_quotes: bool = True,
+    quote_state: dict[str, bool] | None = None,
+) -> str:
     if text is None:
         return ""
-    value = str(text)
-    replacements = [
-        ("\\", r"\textbackslash{}"),
-        ("&", r"\&"),
-        ("%", r"\%"),
-        ("$", r"\$"),
-        ("#", r"\#"),
-        ("_", r"\_"),
-        ("{", r"\{"),
-        ("}", r"\}"),
-        ("~", r"\textasciitilde{}"),
-        ("^", r"\textasciicircum{}"),
-    ]
-    for old, new in replacements:
-        value = value.replace(old, new)
-    return value
+    next_quote_is_opening = True
+    if quote_state is not None:
+        next_quote_is_opening = quote_state.get("next_quote_is_opening", True)
+
+    parts: list[str] = []
+    for char in str(text):
+        if char == '"' and convert_quotes:
+            parts.append("``" if next_quote_is_opening else "''")
+            next_quote_is_opening = not next_quote_is_opening
+            continue
+        parts.append(LATEX_SPECIAL_CHARS.get(char, char))
+
+    if quote_state is not None:
+        quote_state["next_quote_is_opening"] = next_quote_is_opening
+    return "".join(parts)
 
 
 def block_summary(text: str, limit: int = 80) -> str:

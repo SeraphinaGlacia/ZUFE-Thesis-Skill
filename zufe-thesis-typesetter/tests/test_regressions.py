@@ -71,6 +71,24 @@ def test_render_chapters_preserves_superscript_and_heading_levels():
             ],
         }
     ) == "引用\\textsuperscript{1}\n"
+    assert render_chapters.block_to_latex(
+        {
+            "source_type": "paragraph",
+            "runs": [
+                {"text": '"产品', "superscript": False},
+                {"text": '差异化"', "superscript": False},
+            ],
+        }
+    ) == "``产品差异化''\n"
+
+
+def test_latex_escape_ascii_double_quotes_and_single_scan():
+    common = load_module("common")
+    assert common.latex_escape('"产品差异化"') == "``产品差异化''"
+    assert common.latex_escape('A&B "test"') == r"A\&B ``test''"
+    assert common.latex_escape("“中文引号”") == "“中文引号”"
+    assert common.latex_escape("student's") == "student's"
+    assert common.latex_escape(r"\alpha {x}") == r"\textbackslash{}alpha \{x\}"
 
 
 def test_render_chapters_table_uses_fixed_font_without_resizebox():
@@ -121,6 +139,7 @@ def test_qa_flags_missing_superscript_rendering_and_resizebox():
 if __name__ == "__main__":
     test_import_docx_preserves_superscript_runs()
     test_render_chapters_preserves_superscript_and_heading_levels()
+    test_latex_escape_ascii_double_quotes_and_single_scan()
     test_render_chapters_table_uses_fixed_font_without_resizebox()
     test_qa_flags_missing_superscript_rendering_and_resizebox()
     print("DOCX fidelity regression tests passed")
