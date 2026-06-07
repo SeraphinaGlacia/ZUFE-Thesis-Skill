@@ -15,6 +15,8 @@ description: 将用户的 Word 论文或报告转换为 ZUFE-Thesis LaTeX 工程
 
 面向非技术用户的主要反馈必须在对话中给出。脚本负责稳定检查、抽取、文件写入、编译和生成机器可读证据。
 
+本 skill 包本身采用 AGPL-3.0-only；ZUFE-Thesis 模板文件仍遵循原模板的 MIT License。不要把本 skill 的 AGPL 解释为对原模板文件或用户论文内容的重新授权。
+
 ## 核心契约
 
 必须从 ZUFE-Thesis 模板根目录运行。修改任何文件前，先确认模板签名完整。
