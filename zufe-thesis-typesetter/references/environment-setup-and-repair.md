@@ -279,7 +279,7 @@ Python 层修复后运行：
 
 ```bash
 python -c "import docx; print(docx.__version__)"
-python output/zufe-thesis-typesetter/scripts/check_env.py --root . --stage minimal
+python zufe-thesis-typesetter/scripts/check_env.py --root . --stage minimal
 ```
 
 LaTeX 层修复后运行：
@@ -291,7 +291,7 @@ biber --version
 kpsewhich ctexbook.cls
 kpsewhich biblatex.sty
 kpsewhich gb7714-2015.bbx
-python output/zufe-thesis-typesetter/scripts/check_env.py --root . --stage latex
+python zufe-thesis-typesetter/scripts/check_env.py --root . --stage latex
 ```
 
 Windows 使用：
@@ -305,7 +305,7 @@ biber --version
 kpsewhich ctexbook.cls
 kpsewhich biblatex.sty
 kpsewhich gb7714-2015.bbx
-python output/zufe-thesis-typesetter/scripts/check_env.py --root . --stage latex
+python zufe-thesis-typesetter/scripts/check_env.py --root . --stage latex
 ```
 
 流程 A 场景下，修复后继续执行 Word 轻量预扫描，确认 DOCX 可读。

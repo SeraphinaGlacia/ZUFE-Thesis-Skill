@@ -52,10 +52,10 @@ workspace/archive/<timestamp>/flow-c-before-build/main.pdf
 固定编译链：
 
 ```text
-xelatex main.tex
+xelatex -interaction=nonstopmode -halt-on-error -file-line-error main.tex
 biber main
-xelatex main.tex
-xelatex main.tex
+xelatex -interaction=nonstopmode -halt-on-error -file-line-error main.tex
+xelatex -interaction=nonstopmode -halt-on-error -file-line-error main.tex
 ```
 
 每一步都要记录：
@@ -114,11 +114,14 @@ xelatex main.tex
 - PDF 文本是否能被读取。
 - 编译日志是否存在严重错误。
 - 是否存在未解析引用或问号引用。
+- `Reference.bib` 是否存在重复 key、明显大括号不平衡，正文引用 key 是否能在 `Reference.bib` 中找到。
 - 参考文献是否输出。
 - 目录、摘要、正文、参考文献等关键章节信号是否存在。
+- 如果 `thesis.json` 记录了上标 run，章节源码中是否保留对应 `\textsuperscript{...}`。
+- 是否出现无条件 `\resizebox{\textwidth}{!}` 表格缩放风险；出现时最终状态至少应为 `needs_review`。
 - 是否残留模板蓝字或模板说明。
-- 是否残留明显占位符，例如 `xx`、`xxxxxxxxxxxx`、`本文……`。
-- 输出报告是否生成。
+- 是否残留明显占位符，例如 `xx`、`xxxxxxxxxxxx`、`本文……`、`20xx`、`xxx`。
+- `workspace/output/report.md` 和 `workspace/output/qa_report.md` 是否生成。
 
 PDF 生成但存在模板蓝字、占位符、可疑文本或非阻断风险时，最终状态不能是 `ready_to_submit`。
 

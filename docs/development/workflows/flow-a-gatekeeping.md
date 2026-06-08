@@ -27,9 +27,9 @@
 - `misc/abstract.tex`
 - `misc/originality.tex`
 - `misc/reference.tex`
-- `simhei.ttf`
-- `stsong.ttf`
-- `stkaiti.ttf`
+- `fonts/simhei.ttf`
+- `fonts/stsong.ttf`
+- `fonts/stkaiti.ttf`
 - `InitFile/schoolLogo.png`
 
 不作为流程 A 门禁：
@@ -37,7 +37,7 @@
 - `main.pdf`
 - `README.md`
 - `docs/`
-- `papperCode/`
+- `paperCode/`
 - 样例章节
 - 样例图片
 
@@ -92,8 +92,9 @@ workspace/input/thesis.docx
 
 流程 A 只确认封面和身份信息：
 
-- 报告类型：默认毕业论文，即 `report_style: 0`；允许用户改为专业实践 1/2。
+- 报告类型：必须由 Word 证据或用户确认，写入 `report_style`；不得静默默认成毕业论文。
 - 中文题目。
+- 中文摘要页题目，可选，写入 `thesis_title_abs_cn`；缺省时模板回退使用中文题目。
 - 英文题目。
 - 是否有副标题；默认无副标题。
 - 中文副标题和英文副标题，仅在用户确认有副标题时填写。
