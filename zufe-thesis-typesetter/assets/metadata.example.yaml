@@ -1,0 +1,13 @@
+report_style: 0
+thesis_title_cn: "中文题目"
+thesis_title_en: "English Title"
+has_subtitle: false
+thesis_subtitle_cn: ""
+thesis_subtitle_en: ""
+college: "学院"
+major: "专业"
+name: "姓名"
+student_id: "学号"
+mentor: "导师"
+class_name: "班级"
+date: "20xx年6月"
