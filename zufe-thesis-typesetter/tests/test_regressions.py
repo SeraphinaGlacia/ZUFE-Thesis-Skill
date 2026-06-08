@@ -592,6 +592,50 @@ def test_render_chapters_blocks_prefix_path_escape():
         assert not (root / "chapters_evil/escape.tex").exists()
 
 
+def test_render_chapters_blocks_discarded_block_in_structure():
+    render_chapters = load_module("render_chapters")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "chapters").mkdir()
+        (root / "workspace/intermediate").mkdir(parents=True)
+        thesis_path = root / "workspace/intermediate/thesis.json"
+        thesis_path.write_text(
+            json.dumps(
+                {
+                    "source_blocks": [
+                        {
+                            "id": "p0001",
+                            "status": "discarded_with_reason",
+                            "discard_reason": "模板说明文字",
+                            "text": "不应该被写入正文",
+                            "target_slot": "chapters/1_intro.tex",
+                        }
+                    ],
+                    "structure": {
+                        "chapters": [
+                            {
+                                "title": "intro",
+                                "file": "chapters/1_intro.tex",
+                                "block_ids": ["p0001"],
+                            }
+                        ]
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        result = render_chapters.render(root, thesis_path, allow_incomplete=False)
+        thesis = json.loads(thesis_path.read_text(encoding="utf-8"))
+
+        assert result["status"] == "blocked"
+        assert result["blocking_blocks"] == ["p0001"]
+        assert not (root / "chapters/1_intro.tex").exists()
+        assert thesis["source_blocks"][0]["status"] == "discarded_with_reason"
+        assert thesis["source_blocks"][0].get("render_result") is None
+
+
 def test_render_basicinfo_supports_thesis_title_abs():
     render_basicinfo = load_module("render_basicinfo")
     with tempfile.TemporaryDirectory() as tmp:
@@ -742,6 +786,7 @@ if __name__ == "__main__":
     test_render_chapters_preserves_superscript_and_heading_levels()
     test_latex_escape_ascii_double_quotes_and_single_scan()
     test_render_chapters_blocks_prefix_path_escape()
+    test_render_chapters_blocks_discarded_block_in_structure()
     test_render_basicinfo_supports_thesis_title_abs()
     test_render_basicinfo_hides_hyperref_link_borders()
     test_build_xelatex_uses_noninteractive_error_flags()
