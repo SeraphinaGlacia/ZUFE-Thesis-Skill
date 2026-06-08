@@ -751,6 +751,28 @@ def test_qa_placeholder_scan_includes_generated_chapter_files():
         assert checks[r"placeholder_xxxxxxxxxxxx"]["status"] == "warning"
 
 
+def test_qa_requires_build_result_for_pdf_freshness():
+    qa = load_module("qa")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "chapters").mkdir()
+        (root / "workspace/intermediate").mkdir(parents=True)
+        (root / "main.pdf").write_bytes(
+            b"%PDF-1.7\n1 0 obj << /Type /Page >> endobj\n"
+        )
+        (root / "workspace/intermediate/thesis.json").write_text(
+            "{}",
+            encoding="utf-8",
+        )
+
+        result = qa.qa(root)
+        checks = {check["name"]: check for check in result["checks"]}
+        assert checks["pdf_exists"]["status"] == "passed"
+        assert checks["pdf_freshness"]["status"] == "failed"
+        assert "build_result.json" in checks["pdf_freshness"]["detail"]
+        assert result["status"] == "failed"
+
+
 def test_qa_counts_pages_with_pdfinfo_before_byte_fallback():
     qa = load_module("qa")
     with tempfile.TemporaryDirectory() as tmp:
@@ -793,5 +815,6 @@ if __name__ == "__main__":
     test_render_chapters_table_uses_fixed_font_without_resizebox()
     test_qa_flags_missing_superscript_rendering_and_resizebox()
     test_qa_placeholder_scan_includes_generated_chapter_files()
+    test_qa_requires_build_result_for_pdf_freshness()
     test_qa_counts_pages_with_pdfinfo_before_byte_fallback()
     print("DOCX fidelity regression tests passed")

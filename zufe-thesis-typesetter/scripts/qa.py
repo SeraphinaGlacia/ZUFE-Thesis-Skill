@@ -320,7 +320,8 @@ def qa(root: Path) -> dict:
     """
     output_dir = root / "workspace/output"
     output_dir.mkdir(parents=True, exist_ok=True)
-    build_result = read_json(output_dir / "build_result.json", default={})
+    build_result_path = output_dir / "build_result.json"
+    build_result = read_json(build_result_path, default={})
     pdf = root / "main.pdf"
     checks = []
     if pdf.exists():
@@ -332,12 +333,17 @@ def qa(root: Path) -> dict:
             {"name": "pdf_exists", "status": "failed", "detail": "main.pdf 缺失。"}
         )
 
-    new_pdf = bool(build_result.get("new_pdf")) if build_result else pdf.exists()
+    new_pdf = bool(build_result.get("new_pdf")) if build_result else False
+    freshness_detail = (
+        f"new_pdf={new_pdf}"
+        if build_result
+        else "missing workspace/output/build_result.json; run build.py before QA."
+    )
     checks.append(
         {
             "name": "pdf_freshness",
             "status": "passed" if new_pdf else "failed",
-            "detail": f"new_pdf={new_pdf}",
+            "detail": freshness_detail,
         }
     )
 
