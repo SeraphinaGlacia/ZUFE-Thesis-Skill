@@ -93,6 +93,7 @@ Codex 负责语义判断，脚本不得替代：
 ## 详细参考
 
 - 做流程 A 前，读取 `references/flow-a-gatekeeping.md`。
+- 遇到依赖缺失、环境安装或编译环境修复时，读取 `references/environment-setup-and-repair.md`。
 - 做流程 B 抽取或渲染前，读取 `references/flow-b-conversion.md`。
 - 做流程 C 编译或 QA 前，读取 `references/flow-c-export-and-qa.md`。
 - 手动编辑 `thesis.json` 前，读取 `references/thesis-json-schema.md`。
