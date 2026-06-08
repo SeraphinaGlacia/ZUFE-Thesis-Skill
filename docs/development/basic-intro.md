@@ -20,5 +20,6 @@
 
 - `zufe-thesis-typesetter/SKILL.md`：Skill 触发条件、核心契约和质量硬约束。
 - `zufe-thesis-typesetter/references/`：当前运行时 A/B/C 流程、环境修复和 `thesis.json` 契约。
+- `docs/development/skill-internal-workflow.md`：Skill 包内部调度流程总览，说明 `SKILL.md`、`references/`、`scripts/` 和 `tests/` 如何协作。
 - `docs/development/workflow-design.md`：开发期用户侧 A/B/C 工作流总览。
 - `docs/others/让 LaTeX 的好处先发生：我的 ZUFE Thesis Skill 设计初衷.md`：项目愿景与设计初衷。
