@@ -1,6 +1,6 @@
 ---
 name: zufe-thesis-typesetter
-description: 将用户的 Word 论文或报告转换为 ZUFE-Thesis LaTeX 工程并完成 PDF 质检。当 Codex 需要运行 A/B/C 论文工作流时使用：验证 ZUFE 模板根目录，准备 workspace/input/thesis.docx 和 metadata.yaml，抽取 DOCX 到 thesis.json 且避免静默丢失，写入模板文件，使用 xelatex/biber 编译，诊断失败并生成 QA 报告。
+description: 当用户需要使用 ZUFE-Thesis 模板处理 Word 论文或报告，并交付符合格式、经过检查的 LaTeX/PDF 排版结果时使用。
 ---
 
 # ZUFE Thesis Typesetter
@@ -84,7 +84,7 @@ Codex 负责语义判断，脚本不得替代：
 - DOCX 段落不得只保留纯文本；必须保留 run 级 `bold`、`italic`、`superscript`、`subscript` 和字号证据。上标数字必须渲染为 `\textsuperscript{...}`，不得压平成正文普通数字。
 - Word 中疑似参考标号的上标数字不得静默改写成普通文本。若要转为正式 `\cite`/`\supercite`，必须先确认参考文献映射；否则至少保留视觉上标。
 - 普通正文中的 ASCII 双引号必须转换为 LaTeX 左右引号 ``...''；中文智能引号默认保留。不得对 raw LaTeX、图片路径、引用命令和公式套用正文引号转换。
-- 缺失英文摘要或英文关键词时，不得自动根据中文补写；若用户允许生成，必须先说明这是内容性补写，并在 metadata 中记录授权。
+- 缺失英文摘要或英文关键词时，必须让用户选择：确认留空、手动提供或允许生成；不得默认留空或自动根据中文补写。若用户允许生成，必须先说明这是内容性补写，并在 metadata 中记录授权。
 - 生成 `chapters/basicinfo.tex` 时必须写入全局 `\hypersetup{hidelinks,pdfborder={0 0 0},pdfborderstyle={/S/U/W 0}}`，避免图表引用和 URL 在 PDF 中显示彩色链接边框。
 - 表格默认使用模板风格字号 `\zihao{5}`。不得无条件使用 `\resizebox{\textwidth}{!}{...}`，因为它会把较窄表格放大并破坏字号。
 - 只有表格自然宽度确实超过版心且没有更稳妥的列宽方案时，才允许缩小表格；禁止为了“填满版心”放大表格。

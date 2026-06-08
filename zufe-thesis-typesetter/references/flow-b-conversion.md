@@ -114,7 +114,10 @@ Word 段落中上标、下标是可见格式，属于必须保留的内容证据
 
 ## 英文摘要与关键词
 
-- 如果 Word 没有英文摘要或英文关键词，不得直接根据中文内容自动补写。
+- 如果 Word 没有英文摘要或英文关键词，不得默认留空，也不得直接根据中文内容自动补写。
+- 缺失英文摘要或英文关键词时，必须先让用户选择：`omit` 确认留空、`manual` 用户手动提供，或 `generate` 允许 Codex 生成。
+- 用户选择必须记录为 `english_content_decision=omit/manual/generate`。未记录选择时，`render_basicinfo.py` 必须阻止渲染 `chapters/basicinfo.tex`。
+- 选择 `manual` 或 `generate` 后，渲染前必须已经有英文摘要和英文关键词内容；否则继续阻止。
 - 需要生成英文摘要或英文关键词时，必须先告知用户这是内容性补写，并获得明确允许。
 - 已生成的英文内容必须在 `thesis.json` 标记来源，例如 `english_content_source=generated`；渲染前 `metadata.yaml` 必须有 `allow_generated_english: true`。
 

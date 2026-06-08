@@ -91,6 +91,26 @@
 - 若 `runs[].superscript=true`，渲染结果必须保留视觉上标，例如 `\textsuperscript{1}`。
 - 若上标数字实际是参考文献标号，Codex 可以在确认映射后改成引用命令；未确认前不得压平成普通数字。
 
+## 英文内容决策
+
+如果英文摘要或英文关键词缺失，必须在渲染 `chapters/basicinfo.tex` 前记录用户选择：
+
+```json
+{
+  "metadata": {
+    "english_content_decision": "omit"
+  }
+}
+```
+
+允许值：
+
+- `omit`：用户确认留空。
+- `manual`：用户会手动提供英文摘要和英文关键词。
+- `generate`：用户允许 Codex 生成英文摘要和英文关键词。
+
+选择 `manual` 或 `generate` 后，`metadata.abstract_en` 和 `metadata.keywords_en` 必须存在。生成内容还必须记录来源，例如 `english_content_source=generated`，并在 `metadata.yaml` 中记录 `allow_generated_english: true`。
+
 ## 暂不支持特性结构
 
 ```json
