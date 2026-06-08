@@ -50,6 +50,22 @@ def write_template_files(root: Path, relative_paths: list[str]) -> None:
         path.write_text("placeholder\n", encoding="utf-8")
 
 
+def basic_metadata_yaml(*, title_cn: str = "测试题目", extra: str = "") -> str:
+    return (
+        "report_style: 1\n"
+        f"thesis_title_cn: {title_cn}\n"
+        "thesis_title_en: Test Title\n"
+        "college: 测试学院\n"
+        "major: 测试专业\n"
+        "name: 测试姓名\n"
+        "student_id: 20260001\n"
+        "mentor: 张老师\n"
+        "class_name: 测试班级\n"
+        "date: 2026年6月\n"
+        f"{extra}"
+    )
+
+
 def rewrite_docx_xml(docx_path: Path, replacements: dict[str, str], additions: dict[str, str] | None = None) -> None:
     original = docx_path.read_bytes()
     with tempfile.TemporaryDirectory() as tmp:
@@ -402,6 +418,49 @@ def test_render_basicinfo_blocks_missing_report_style():
         assert not (root / "chapters/basicinfo.tex").exists()
 
 
+def test_render_basicinfo_blocks_missing_required_cover_metadata():
+    render_basicinfo = load_module("render_basicinfo")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "chapters").mkdir()
+        metadata = root / "metadata.yaml"
+        metadata.write_text(
+            "report_style: 1\n"
+            "english_content_decision: omit\n",
+            encoding="utf-8",
+        )
+
+        result = render_basicinfo.render(root, metadata, thesis_path=None)
+        assert result["status"] == "blocked"
+        assert result["gate"] == "metadata_required"
+        assert "thesis_title_cn" in result["missing_fields"]
+        assert "name" in result["missing_fields"]
+        assert "student_id" in result["missing_fields"]
+        assert not (root / "chapters/basicinfo.tex").exists()
+
+
+def test_render_basicinfo_blocks_missing_subtitle_when_enabled():
+    render_basicinfo = load_module("render_basicinfo")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "chapters").mkdir()
+        metadata = root / "metadata.yaml"
+        metadata.write_text(
+            basic_metadata_yaml(
+                extra="has_subtitle: true\n"
+                "english_content_decision: omit\n",
+            ),
+            encoding="utf-8",
+        )
+
+        result = render_basicinfo.render(root, metadata, thesis_path=None)
+        assert result["status"] == "blocked"
+        assert result["gate"] == "metadata_required"
+        assert "thesis_subtitle_cn" in result["missing_fields"]
+        assert "thesis_subtitle_en" in result["missing_fields"]
+        assert not (root / "chapters/basicinfo.tex").exists()
+
+
 def test_render_basicinfo_blocks_unapproved_generated_english():
     render_basicinfo = load_module("render_basicinfo")
     with tempfile.TemporaryDirectory() as tmp:
@@ -409,11 +468,7 @@ def test_render_basicinfo_blocks_unapproved_generated_english():
         (root / "chapters").mkdir()
         (root / "workspace/intermediate").mkdir(parents=True)
         metadata = root / "metadata.yaml"
-        metadata.write_text(
-            "report_style: 1\n"
-            "thesis_title_cn: 测试题目\n",
-            encoding="utf-8",
-        )
+        metadata.write_text(basic_metadata_yaml(), encoding="utf-8")
         thesis_path = root / "workspace/intermediate/thesis.json"
         thesis_path.write_text(
             json.dumps(
@@ -435,9 +490,7 @@ def test_render_basicinfo_blocks_unapproved_generated_english():
         assert not (root / "chapters/basicinfo.tex").exists()
 
         metadata.write_text(
-            "report_style: 1\n"
-            "thesis_title_cn: 测试题目\n"
-            "allow_generated_english: true\n",
+            basic_metadata_yaml(extra="allow_generated_english: true\n"),
             encoding="utf-8",
         )
         result = render_basicinfo.render(root, metadata, thesis_path)
@@ -451,11 +504,7 @@ def test_render_basicinfo_requires_missing_english_content_decision():
         (root / "chapters").mkdir()
         (root / "workspace/intermediate").mkdir(parents=True)
         metadata = root / "metadata.yaml"
-        metadata.write_text(
-            "report_style: 1\n"
-            "thesis_title_cn: 测试题目\n",
-            encoding="utf-8",
-        )
+        metadata.write_text(basic_metadata_yaml(), encoding="utf-8")
         thesis_path = root / "workspace/intermediate/thesis.json"
         thesis_path.write_text(
             json.dumps({"metadata": {"abstract_cn": "中文摘要。"}}, ensure_ascii=False),
@@ -468,9 +517,7 @@ def test_render_basicinfo_requires_missing_english_content_decision():
         assert not (root / "chapters/basicinfo.tex").exists()
 
         metadata.write_text(
-            "report_style: 1\n"
-            "thesis_title_cn: 测试题目\n"
-            "english_content_decision: omit\n",
+            basic_metadata_yaml(extra="english_content_decision: omit\n"),
             encoding="utf-8",
         )
         result = render_basicinfo.render(root, metadata, thesis_path)
@@ -552,10 +599,11 @@ def test_render_basicinfo_supports_thesis_title_abs():
         (root / "chapters").mkdir()
         metadata = root / "metadata.yaml"
         metadata.write_text(
-            "report_style: 1\n"
-            "thesis_title_cn: 封面题目\n"
-            "thesis_title_abs_cn: 摘要页题目\n"
-            "english_content_decision: omit\n",
+            basic_metadata_yaml(
+                title_cn="封面题目",
+                extra="thesis_title_abs_cn: 摘要页题目\n"
+                "english_content_decision: omit\n",
+            ),
             encoding="utf-8",
         )
         render_basicinfo.render(root, metadata, thesis_path=None)
@@ -571,9 +619,7 @@ def test_render_basicinfo_hides_hyperref_link_borders():
         (root / "chapters").mkdir()
         metadata = root / "metadata.yaml"
         metadata.write_text(
-            "report_style: 1\n"
-            "thesis_title_cn: 测试题目\n"
-            "english_content_decision: omit\n",
+            basic_metadata_yaml(extra="english_content_decision: omit\n"),
             encoding="utf-8",
         )
         render_basicinfo.render(root, metadata, thesis_path=None)
@@ -688,6 +734,8 @@ if __name__ == "__main__":
     test_check_env_python_docx_hint_uses_short_timeout_and_mirror_fallback()
     test_prescan_reads_cover_table_metadata_without_report_style_default()
     test_render_basicinfo_blocks_missing_report_style()
+    test_render_basicinfo_blocks_missing_required_cover_metadata()
+    test_render_basicinfo_blocks_missing_subtitle_when_enabled()
     test_render_basicinfo_blocks_unapproved_generated_english()
     test_render_basicinfo_requires_missing_english_content_decision()
     test_qa_flags_bibtex_and_citation_lint_failures()

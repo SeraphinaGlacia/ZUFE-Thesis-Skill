@@ -120,6 +120,58 @@ def missing_english_fields(abstract_en: Any, keywords_en: Any) -> list[str]:
     return missing
 
 
+REQUIRED_METADATA_FIELDS = [
+    ("thesis_title_cn", ("thesis_title_cn", "title_cn", "title")),
+    ("thesis_title_en", ("thesis_title_en", "title_en")),
+    ("college", ("college", "deptName")),
+    ("major", ("major", "majorName")),
+    ("name", ("name", "yourName")),
+    ("student_id", ("student_id", "studentID")),
+    ("mentor", ("mentor", "mentorName")),
+    ("class_name", ("class_name", "className")),
+    ("date", ("date", "today")),
+]
+
+
+def required_metadata_missing(metadata: dict) -> list[str]:
+    """检查封面和身份字段是否已由流程 A 确认。
+
+    Args:
+        metadata (dict): ``metadata.yaml`` 字段。
+
+    Returns:
+        list[str]: 缺失或无效的必填字段名。
+    """
+    missing = []
+    report_style = metadata_value(metadata, "report_style", default="").strip()
+    if report_style not in {"0", "1"}:
+        missing.append("report_style")
+
+    for field, aliases in REQUIRED_METADATA_FIELDS:
+        if not metadata_value(metadata, *aliases, default="").strip():
+            missing.append(field)
+
+    if metadata_bool(metadata, "has_subtitle", default=False):
+        subtitle_cn = metadata_value(
+            metadata,
+            "thesis_subtitle_cn",
+            "subtitle_cn",
+            default="",
+        ).strip()
+        subtitle_en = metadata_value(
+            metadata,
+            "thesis_subtitle_en",
+            "subtitle_en",
+            default="",
+        ).strip()
+        if not subtitle_cn:
+            missing.append("thesis_subtitle_cn")
+        if not subtitle_en:
+            missing.append("thesis_subtitle_en")
+
+    return missing
+
+
 def validate_english_content_choice(
     metadata: dict,
     thesis_meta: dict,
@@ -203,17 +255,18 @@ def render(root: Path, metadata_path: Path, thesis_path: Path | None) -> dict:
     abstracts = thesis_meta.get("abstracts", {})
     keywords = thesis_meta.get("keywords", {})
 
-    report_style = metadata_value(metadata, "report_style", default="").strip()
-    if report_style not in {"0", "1"}:
+    missing_metadata = required_metadata_missing(metadata)
+    if missing_metadata:
         return {
             "flow": "B",
             "step": "render_basicinfo",
             "status": "blocked",
             "gate": "metadata_required",
-            "missing_fields": ["report_style"],
-            "detail": "报告类型不能默认推断；必须由 Word 证据或用户确认 report_style=0/1。",
-            "next_steps": ["先回到流程 A 确认报告类型，再渲染 basicinfo.tex。"],
+            "missing_fields": missing_metadata,
+            "detail": "封面和身份字段必须由 Word 证据或用户确认，不能写入空宏。",
+            "next_steps": ["先回到流程 A 确认缺失 metadata，再渲染 basicinfo.tex。"],
         }
+    report_style = metadata_value(metadata, "report_style", default="").strip()
     if generated_english_requires_confirmation(thesis_meta) and not metadata_true(
         metadata,
         "allow_generated_english",
