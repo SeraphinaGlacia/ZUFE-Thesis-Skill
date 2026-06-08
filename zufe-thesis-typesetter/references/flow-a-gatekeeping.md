@@ -25,12 +25,12 @@
 - `misc/abstract.tex`
 - `misc/originality.tex`
 - `misc/reference.tex`
-- `simhei.ttf`
-- `stsong.ttf`
-- `stkaiti.ttf`
+- `fonts/simhei.ttf`
+- `fonts/stsong.ttf`
+- `fonts/stkaiti.ttf`
 - `InitFile/schoolLogo.png`
 
-不要把 `main.pdf`、`README.md`、`docs/`、`papperCode/`、样例章节或样例图片作为门禁。第一版不把 `InitFile/anonyLogo.png` 作为硬门禁。
+不要把 `main.pdf`、`README.md`、`docs/`、`paperCode/`、样例章节或样例图片作为门禁。第一版不把 `InitFile/anonyLogo.png` 作为硬门禁。
 
 ## 工作区
 

@@ -37,6 +37,19 @@ def write_tiny_png(path: Path) -> None:
     path.write_bytes(TINY_PNG)
 
 
+def write_template_files(root: Path, relative_paths: list[str]) -> None:
+    """写入用于模板签名测试的最小占位文件。
+
+    Args:
+        root (Path): 临时模板根目录。
+        relative_paths (list[str]): 需要创建的相对路径列表。
+    """
+    for relative_path in relative_paths:
+        path = root / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("placeholder\n", encoding="utf-8")
+
+
 def rewrite_docx_xml(docx_path: Path, replacements: dict[str, str], additions: dict[str, str] | None = None) -> None:
     original = docx_path.read_bytes()
     with tempfile.TemporaryDirectory() as tmp:
@@ -109,6 +122,45 @@ def test_render_chapters_preserves_superscript_and_heading_levels():
             ],
         }
     ) == "``产品差异化''\n"
+
+
+def test_check_template_requires_new_fonts_directory_layout():
+    check_template = load_module("check_template")
+    base_signature = [
+        "main.tex",
+        "zufe.cls",
+        "Reference.bib",
+        "chapters/basicinfo.tex",
+        "chapters/mainbody.tex",
+        "misc/cover.tex",
+        "misc/abstract.tex",
+        "misc/originality.tex",
+        "misc/reference.tex",
+        "InitFile/schoolLogo.png",
+    ]
+
+    with tempfile.TemporaryDirectory() as tmp:
+        old_root = Path(tmp) / "old"
+        write_template_files(
+            old_root,
+            base_signature + ["simhei.ttf", "stsong.ttf", "stkaiti.ttf"],
+        )
+        old_result = check_template.check_template(old_root)
+        assert old_result["status"] == "blocked"
+        assert old_result["missing"] == [
+            "fonts/simhei.ttf",
+            "fonts/stsong.ttf",
+            "fonts/stkaiti.ttf",
+        ]
+
+        new_root = Path(tmp) / "new"
+        write_template_files(
+            new_root,
+            base_signature
+            + ["fonts/simhei.ttf", "fonts/stsong.ttf", "fonts/stkaiti.ttf"],
+        )
+        new_result = check_template.check_template(new_root)
+        assert new_result["status"] == "passed"
 
 
 def test_latex_escape_ascii_double_quotes_and_single_scan():
@@ -627,6 +679,7 @@ def test_qa_counts_pages_with_pdfinfo_before_byte_fallback():
 
 if __name__ == "__main__":
     test_import_docx_preserves_superscript_runs()
+    test_check_template_requires_new_fonts_directory_layout()
     test_import_docx_preserves_image_anchor_order()
     test_export_assets_does_not_mark_image_semantic_position_mapped()
     test_import_docx_reports_unsupported_features()

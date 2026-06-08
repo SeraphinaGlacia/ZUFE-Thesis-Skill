@@ -22,9 +22,9 @@ TEMPLATE_SIGNATURE = [
     "misc/abstract.tex",
     "misc/originality.tex",
     "misc/reference.tex",
-    "simhei.ttf",
-    "stsong.ttf",
-    "stkaiti.ttf",
+    "fonts/simhei.ttf",
+    "fonts/stsong.ttf",
+    "fonts/stkaiti.ttf",
     "InitFile/schoolLogo.png",
 ]
 

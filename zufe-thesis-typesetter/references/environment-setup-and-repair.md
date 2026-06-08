@@ -102,9 +102,9 @@ misc/cover.tex
 misc/abstract.tex
 misc/originality.tex
 misc/reference.tex
-simhei.ttf
-stsong.ttf
-stkaiti.ttf
+fonts/simhei.ttf
+fonts/stsong.ttf
+fonts/stkaiti.ttf
 InitFile/schoolLogo.png
 ```
 
@@ -119,7 +119,7 @@ InitFile/schoolLogo.png
 - `misc/abstract.tex`：摘要页模板部件。
 - `misc/originality.tex`：原创性声明模板部件。
 - `misc/reference.tex`：参考文献输出模板部件。
-- `simhei.ttf`、`stsong.ttf`、`stkaiti.ttf`：模板指定的中文字体文件。
+- `fonts/simhei.ttf`、`fonts/stsong.ttf`、`fonts/stkaiti.ttf`：模板指定的中文字体文件。
 - `InitFile/schoolLogo.png`：封面所需学校标识资源。
 
 这些文件或目录不作为硬门禁：
@@ -127,7 +127,7 @@ InitFile/schoolLogo.png
 - `main.pdf`
 - `README.md`
 - `docs/`
-- `papperCode/`
+- `paperCode/`
 - 样例章节文件
 - 样例图片
 - `InitFile/anonyLogo.png`
@@ -138,9 +138,9 @@ InitFile/schoolLogo.png
 
 模板根目录必须有这些字体和资源：
 
-- `simhei.ttf`
-- `stsong.ttf`
-- `stkaiti.ttf`
+- `fonts/simhei.ttf`
+- `fonts/stsong.ttf`
+- `fonts/stkaiti.ttf`
 - `InitFile/schoolLogo.png`
 
 模板还调用系统字体 `Times New Roman`。Windows 通常内置该字体；macOS 若缺失，应先报告为字体环境问题，获得用户确认后再处理。
