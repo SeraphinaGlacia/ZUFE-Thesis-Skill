@@ -372,6 +372,39 @@ def test_render_basicinfo_blocks_unapproved_generated_english():
         assert result["status"] == "passed"
 
 
+def test_render_basicinfo_requires_missing_english_content_decision():
+    render_basicinfo = load_module("render_basicinfo")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "chapters").mkdir()
+        (root / "workspace/intermediate").mkdir(parents=True)
+        metadata = root / "metadata.yaml"
+        metadata.write_text(
+            "report_style: 1\n"
+            "thesis_title_cn: 测试题目\n",
+            encoding="utf-8",
+        )
+        thesis_path = root / "workspace/intermediate/thesis.json"
+        thesis_path.write_text(
+            json.dumps({"metadata": {"abstract_cn": "中文摘要。"}}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        result = render_basicinfo.render(root, metadata, thesis_path)
+        assert result["status"] == "blocked"
+        assert result["gate"] == "english_content_decision_required"
+        assert not (root / "chapters/basicinfo.tex").exists()
+
+        metadata.write_text(
+            "report_style: 1\n"
+            "thesis_title_cn: 测试题目\n"
+            "english_content_decision: omit\n",
+            encoding="utf-8",
+        )
+        result = render_basicinfo.render(root, metadata, thesis_path)
+        assert result["status"] == "passed"
+
+
 def test_qa_flags_bibtex_and_citation_lint_failures():
     qa = load_module("qa")
     with tempfile.TemporaryDirectory() as tmp:
@@ -449,7 +482,8 @@ def test_render_basicinfo_supports_thesis_title_abs():
         metadata.write_text(
             "report_style: 1\n"
             "thesis_title_cn: 封面题目\n"
-            "thesis_title_abs_cn: 摘要页题目\n",
+            "thesis_title_abs_cn: 摘要页题目\n"
+            "english_content_decision: omit\n",
             encoding="utf-8",
         )
         render_basicinfo.render(root, metadata, thesis_path=None)
@@ -464,7 +498,12 @@ def test_render_basicinfo_hides_hyperref_link_borders():
         root = Path(tmp)
         (root / "chapters").mkdir()
         metadata = root / "metadata.yaml"
-        metadata.write_text("report_style: 1\nthesis_title_cn: 测试题目\n", encoding="utf-8")
+        metadata.write_text(
+            "report_style: 1\n"
+            "thesis_title_cn: 测试题目\n"
+            "english_content_decision: omit\n",
+            encoding="utf-8",
+        )
         render_basicinfo.render(root, metadata, thesis_path=None)
         basicinfo = (root / "chapters/basicinfo.tex").read_text(encoding="utf-8")
         assert r"\hypersetup{hidelinks,pdfborder={0 0 0},pdfborderstyle={/S/U/W 0}}" in basicinfo
@@ -560,6 +599,7 @@ if __name__ == "__main__":
     test_prescan_reads_cover_table_metadata_without_report_style_default()
     test_render_basicinfo_blocks_missing_report_style()
     test_render_basicinfo_blocks_unapproved_generated_english()
+    test_render_basicinfo_requires_missing_english_content_decision()
     test_qa_flags_bibtex_and_citation_lint_failures()
     test_render_chapters_preserves_superscript_and_heading_levels()
     test_latex_escape_ascii_double_quotes_and_single_scan()
