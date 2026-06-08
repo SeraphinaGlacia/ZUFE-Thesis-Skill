@@ -17,6 +17,13 @@ REQUIRED_TEX_FILES = {
     "gb7714-2015.bbx": "gb7714-2015 是模板使用的国标参考文献样式。",
 }
 
+PYTHON_DOCX_INSTALL_HINT = (
+    "先短超时尝试：python -m pip install --timeout 8 --retries 1 python-docx；"
+    "若失败、超时或无响应，改用中国大陆镜像："
+    "python -m pip install --timeout 15 --retries 2 "
+    "-i https://pypi.tuna.tsinghua.edu.cn/simple python-docx"
+)
+
 
 def kpsewhich_exists(filename: str) -> bool:
     """使用 kpsewhich 判断 TeX 文件是否可被当前发行版找到。
@@ -55,7 +62,7 @@ def check(stage: str) -> dict:
                     "python-docx",
                     "blocked",
                     "缺少 python-docx，无法预扫描和抽取 DOCX。",
-                    install_hint="python3 -m pip install python-docx",
+                    install_hint=PYTHON_DOCX_INSTALL_HINT,
                 )
             )
         else:

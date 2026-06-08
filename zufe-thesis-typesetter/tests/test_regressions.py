@@ -288,6 +288,24 @@ def test_check_env_reports_missing_required_latex_packages():
     assert result["status"] == "blocked"
 
 
+def test_check_env_python_docx_hint_uses_short_timeout_and_mirror_fallback():
+    check_env = load_module("check_env")
+    original_find_spec = check_env.importlib.util.find_spec
+    try:
+        check_env.importlib.util.find_spec = (
+            lambda name: None if name == "docx" else original_find_spec(name)
+        )
+        result = check_env.check("minimal")
+    finally:
+        check_env.importlib.util.find_spec = original_find_spec
+
+    checks = {check["name"]: check for check in result["checks"]}
+    hint = checks["python-docx"]["install_hint"]
+    assert "--timeout 8" in hint
+    assert "pypi.tuna.tsinghua.edu.cn/simple" in hint
+    assert "失败、超时或无响应" in hint
+
+
 def test_prescan_reads_cover_table_metadata_without_report_style_default():
     prescan_docx = load_module("prescan_docx")
     with tempfile.TemporaryDirectory() as tmp:
@@ -614,6 +632,7 @@ if __name__ == "__main__":
     test_import_docx_reports_unsupported_features()
     test_flow_b_gate_blocks_unconfirmed_unsupported_features()
     test_check_env_reports_missing_required_latex_packages()
+    test_check_env_python_docx_hint_uses_short_timeout_and_mirror_fallback()
     test_prescan_reads_cover_table_metadata_without_report_style_default()
     test_render_basicinfo_blocks_missing_report_style()
     test_render_basicinfo_blocks_unapproved_generated_english()
