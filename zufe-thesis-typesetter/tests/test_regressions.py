@@ -6,10 +6,12 @@ from __future__ import annotations
 import base64
 import importlib.util
 import json
+import subprocess
 import sys
 import tempfile
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 from docx import Document
 
@@ -589,6 +591,22 @@ def test_qa_placeholder_scan_includes_generated_chapter_files():
         assert checks[r"placeholder_xxxxxxxxxxxx"]["status"] == "warning"
 
 
+def test_qa_counts_pages_with_pdfinfo_before_byte_fallback():
+    qa = load_module("qa")
+    with tempfile.TemporaryDirectory() as tmp:
+        pdf = Path(tmp) / "main.pdf"
+        pdf.write_bytes(b"%PDF-1.7\ncompressed page objects without plain markers\n")
+
+        completed = subprocess.CompletedProcess(
+            args=["pdfinfo", str(pdf)],
+            returncode=0,
+            stdout="Title: test\nPages:          15\n",
+        )
+        with patch.object(qa.shutil, "which", return_value="/usr/bin/pdfinfo"):
+            with patch.object(qa.subprocess, "run", return_value=completed):
+                assert qa.count_pdf_pages(pdf) == 15
+
+
 if __name__ == "__main__":
     test_import_docx_preserves_superscript_runs()
     test_import_docx_preserves_image_anchor_order()
@@ -610,4 +628,5 @@ if __name__ == "__main__":
     test_render_chapters_table_uses_fixed_font_without_resizebox()
     test_qa_flags_missing_superscript_rendering_and_resizebox()
     test_qa_placeholder_scan_includes_generated_chapter_files()
+    test_qa_counts_pages_with_pdfinfo_before_byte_fallback()
     print("DOCX fidelity regression tests passed")

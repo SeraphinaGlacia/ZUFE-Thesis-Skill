@@ -54,15 +54,43 @@ def extract_text_with_pdftotext(pdf: Path) -> str:
     return process.stdout or ""
 
 
-def count_pdf_pages(pdf: Path) -> int:
-    """通过 PDF 对象标记粗略统计页数。
+def count_pdf_pages_with_pdfinfo(pdf: Path) -> int:
+    """优先使用 pdfinfo 读取 PDF 页数。
 
     Args:
         pdf (Path): PDF 文件路径。
 
     Returns:
-        int: 检测到的页面对象数量。
+        int: ``pdfinfo`` 成功读取到的页数；不可用或解析失败时返回 0。
     """
+    if shutil.which("pdfinfo") is None:
+        return 0
+    process = subprocess.run(
+        ["pdfinfo", str(pdf)],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    if process.returncode != 0:
+        return 0
+    match = re.search(r"^Pages:\s*(\d+)\s*$", process.stdout or "", re.MULTILINE)
+    return int(match.group(1)) if match else 0
+
+
+def count_pdf_pages(pdf: Path) -> int:
+    """统计 PDF 页数。
+
+    Args:
+        pdf (Path): PDF 文件路径。
+
+    Returns:
+        int: 检测到的页面数量。
+    """
+    page_count = count_pdf_pages_with_pdfinfo(pdf)
+    if page_count:
+        return page_count
+
+    # 有些 PDF 会压缩页对象，原始字节扫描只能作为缺少 pdfinfo 时的兜底。
     data = pdf.read_bytes()
     return len(re.findall(rb"/Type\s*/Page\b", data))
 

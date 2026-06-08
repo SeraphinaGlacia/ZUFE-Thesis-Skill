@@ -132,8 +132,9 @@ InitFile/schoolLogo.png
 ### QA 可选增强
 
 - `pdftotext`：用于流程 C 抽取 PDF 文本并做文本级 QA。
+- `pdfinfo`：用于流程 C 读取 PDF 页数；比扫描原始 PDF 字节更可靠。
 
-缺少 `pdftotext` 不阻止 PDF 编译，但会降低 QA 确定性。此时最终状态不得因为 PDF 可生成就自动宣称 `ready_to_submit`，应把文本级 QA 不完整写入 `qa_report.md`。
+缺少 `pdftotext` 或 `pdfinfo` 不阻止 PDF 编译，但会降低 QA 确定性。此时最终状态不得因为 PDF 可生成就自动宣称 `ready_to_submit`，应把文本级或页数级 QA 不完整写入 `qa_report.md`。
 
 ## 运用于不同系统的解决问题方案
 
