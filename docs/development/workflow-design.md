@@ -1,6 +1,6 @@
 # ZUFE Thesis Skill 工作流设计
 
-本文档只保留用户侧 A/B/C 工作流总览。每个流程的详细设计放在 `docs/development/workflows/` 下，方便逐步确认、持续调整。
+本文档保留开发期用户侧 A/B/C 工作流总览。当前可执行 Skill 的运行时约束以 `zufe-thesis-typesetter/SKILL.md` 和 `zufe-thesis-typesetter/references/` 为准；`docs/development/workflows/` 用于记录设计演进和维护背景。
 
 ## 总览
 
