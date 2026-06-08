@@ -11,19 +11,51 @@ from common import print_json, write_json
 
 
 PATTERNS = [
-    ("environment_issue", r"command not found|not recognized|I can't find the format file|font.*not found|File `.+\\.sty' not found"),
-    ("user_input_required", r"File `([^']+\\.(png|jpg|jpeg|pdf|eps))' not found|Cannot find image"),
-    ("mechanical_fixable", r"Missing \\$ inserted|Misplaced alignment tab character|Unicode character .* not set up|Undefined control sequence"),
-    ("return_to_flow_b", r"Runaway argument|Paragraph ended before|Extra alignment tab has been changed|Citation '.+' undefined"),
+    (
+        "environment_issue",
+        r"command not found|not recognized|I can't find the format file|"
+        r"font.*not found|File `.+\\.sty' not found",
+    ),
+    (
+        "user_input_required",
+        r"File `([^']+\\.(png|jpg|jpeg|pdf|eps))' not found|Cannot find image",
+    ),
+    (
+        "mechanical_fixable",
+        r"Missing \\$ inserted|Misplaced alignment tab character|"
+        r"Unicode character .* not set up|Undefined control sequence",
+    ),
+    (
+        "return_to_flow_b",
+        r"Runaway argument|Paragraph ended before|"
+        r"Extra alignment tab has been changed|Citation '.+' undefined",
+    ),
 ]
 
 
 def read_log(root: Path, relative: str) -> str:
+    """读取构建日志，缺失时返回空字符串。
+
+    Args:
+        root (Path): ZUFE-Thesis 模板根目录。
+        relative (str): 相对 root 的日志路径。
+
+    Returns:
+        str: 日志文本；文件不存在时为空字符串。
+    """
     path = root / relative
     return path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
 
 
 def next_step(category: str) -> str:
+    """把诊断类别转换为面向 Codex 的下一步动作。
+
+    Args:
+        category (str): 诊断类别。
+
+    Returns:
+        str: 对应的下一步处理建议。
+    """
     return {
         "mechanical_fixable": "只有日志定位到确切文件、路径或字符时，才做机械修复并重编译。",
         "return_to_flow_b": "退回流程 B；流程 C 不修正文档语义或内容归属。",
@@ -34,6 +66,14 @@ def next_step(category: str) -> str:
 
 
 def classify(text: str) -> list[dict]:
+    """根据编译日志文本识别可行动问题。
+
+    Args:
+        text (str): 合并后的 LaTeX/Biber 日志文本。
+
+    Returns:
+        list[dict]: 已识别问题列表；包含类别、证据片段和下一步。
+    """
     issues = []
     for category, pattern in PATTERNS:
         for match in re.finditer(pattern, text, flags=re.IGNORECASE):
@@ -56,10 +96,23 @@ def classify(text: str) -> list[dict]:
 
 
 def diagnose(root: Path) -> dict:
+    """汇总构建日志并输出流程 C 诊断结果。
+
+    Args:
+        root (Path): ZUFE-Thesis 模板根目录。
+
+    Returns:
+        dict: 诊断结果，同时写入 ``workspace/output/diagnosis.json``。
+    """
     logs = ["main.log", "main.blg"]
     output_dir = root / "workspace/output"
     if output_dir.exists():
-        logs.extend(sorted(str(path.relative_to(root)) for path in output_dir.glob("build-step-*.log")))
+        logs.extend(
+            sorted(
+                str(path.relative_to(root))
+                for path in output_dir.glob("build-step-*.log")
+            )
+        )
     combined = "\n".join(read_log(root, log) for log in logs)
     issues = classify(combined)
     status = "passed" if not issues else "needs_action"
@@ -75,6 +128,11 @@ def diagnose(root: Path) -> dict:
 
 
 def main() -> int:
+    """解析命令行参数并输出构建诊断 JSON。
+
+    Returns:
+        int: 没有识别到问题时返回 0，否则返回 2。
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default=".")
     args = parser.parse_args()

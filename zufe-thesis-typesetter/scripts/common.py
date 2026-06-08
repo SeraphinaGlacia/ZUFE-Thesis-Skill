@@ -51,14 +51,33 @@ FINAL_BLOCK_STATES = {"rendered", "discarded_with_reason"}
 
 
 def now_iso() -> str:
+    """生成带本地时区的 ISO 时间戳。
+
+    Returns:
+        str: 秒级精度的 ISO 8601 时间字符串。
+    """
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
 def timestamp() -> str:
+    """生成适合目录名使用的本地时间戳。
+
+    Returns:
+        str: ``YYYYMMDD-HHMMSS`` 格式的时间戳。
+    """
     return datetime.now().strftime("%Y%m%d-%H%M%S")
 
 
 def rel(path: Path, root: Path) -> str:
+    """把路径尽量转换为相对模板根目录的 POSIX 表示。
+
+    Args:
+        path (Path): 待转换路径。
+        root (Path): ZUFE-Thesis 模板根目录。
+
+    Returns:
+        str: 相对 root 的路径；不在 root 下时返回原路径字符串。
+    """
     try:
         return path.resolve().relative_to(root.resolve()).as_posix()
     except ValueError:
@@ -66,7 +85,19 @@ def rel(path: Path, root: Path) -> str:
 
 
 def safe_resolve_under(root: Path, path: str | Path, allowed_dir: str | Path) -> Path:
-    """Resolve path and require it to stay under allowed_dir inside root."""
+    """解析路径并强制限制在指定目录下。
+
+    Args:
+        root (Path): ZUFE-Thesis 模板根目录。
+        path (str | Path): 用户或账本提供的目标路径。
+        allowed_dir (str | Path): 允许写入的目录，通常是 ``chapters`` 或 ``Images``。
+
+    Returns:
+        Path: 解析后的安全绝对路径。
+
+    Raises:
+        ValueError: 当目标路径逃逸出 allowed_dir 时抛出。
+    """
     root = root.resolve()
     allowed = Path(allowed_dir)
     allowed_path = allowed.resolve() if allowed.is_absolute() else (root / allowed).resolve()
@@ -80,6 +111,19 @@ def safe_resolve_under(root: Path, path: str | Path, allowed_dir: str | Path) ->
 
 
 def read_json(path: Path, default: Any | None = None) -> Any:
+    """读取 JSON 文件，支持显式默认值。
+
+    Args:
+        path (Path): JSON 文件路径。
+        default (Any | None): 文件不存在时返回的默认值。
+
+    Returns:
+        Any: 解析后的 JSON 数据。
+
+    Raises:
+        FileNotFoundError: 文件不存在且没有提供默认值时抛出。
+        json.JSONDecodeError: 文件内容不是合法 JSON 时抛出。
+    """
     if not path.exists():
         if default is not None:
             return default
@@ -88,21 +132,51 @@ def read_json(path: Path, default: Any | None = None) -> Any:
 
 
 def write_json(path: Path, data: Any) -> None:
+    """以 UTF-8 和缩进格式写入 JSON 文件。
+
+    Args:
+        path (Path): 输出文件路径。
+        data (Any): 可 JSON 序列化的数据。
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def print_json(data: Any) -> None:
+    """把数据作为 UTF-8 友好的 JSON 打印到 stdout。
+
+    Args:
+        data (Any): 可 JSON 序列化的数据。
+    """
     print(json.dumps(data, ensure_ascii=False, indent=2))
 
 
 def item(name: str, status: str, detail: str, **extra: Any) -> dict[str, Any]:
+    """创建统一结构的检查项。
+
+    Args:
+        name (str): 检查项名称。
+        status (str): 检查状态，例如 ``passed``、``blocked``。
+        detail (str): 面向 Codex 或用户的简短说明。
+        **extra (Any): 需要附加到检查项中的结构化字段。
+
+    Returns:
+        dict[str, Any]: 标准检查项字典。
+    """
     data = {"name": name, "status": status, "detail": detail}
     data.update(extra)
     return data
 
 
 def overall_status(items: list[dict[str, Any]]) -> str:
+    """根据检查项列表汇总门禁状态。
+
+    Args:
+        items (list[dict[str, Any]]): 检查项列表。
+
+    Returns:
+        str: ``blocked``、``needs_confirmation`` 或 ``passed``。
+    """
     statuses = {entry.get("status") for entry in items}
     if "blocked" in statuses or "failed" in statuses:
         return "blocked"
@@ -112,20 +186,51 @@ def overall_status(items: list[dict[str, Any]]) -> str:
 
 
 def command_exists(name: str) -> bool:
+    """判断命令是否存在于 PATH。
+
+    Args:
+        name (str): 命令名称。
+
+    Returns:
+        bool: 命令可执行时返回 True。
+    """
     return shutil.which(name) is not None
 
 
 def ensure_workspace(root: Path) -> None:
+    """创建流程 A/B/C 使用的标准 workspace 目录。
+
+    Args:
+        root (Path): ZUFE-Thesis 模板根目录。
+    """
     for dirname in WORKSPACE_DIRS:
         (root / dirname).mkdir(parents=True, exist_ok=True)
 
 
 def archive_path(root: Path, label: str) -> Path:
+    """生成本轮归档目录路径。
+
+    Args:
+        root (Path): ZUFE-Thesis 模板根目录。
+        label (str): 归档用途标签。
+
+    Returns:
+        Path: ``workspace/archive/<timestamp>/<label>`` 路径。
+    """
     return root / "workspace" / "archive" / timestamp() / label
 
 
 def load_metadata_yaml(path: Path) -> dict[str, Any]:
-    """读取第一版 metadata.yaml 支持的简单 key: value 结构，不强依赖 PyYAML。"""
+    """读取第一版 metadata.yaml 支持的简单 key: value 结构。
+
+    第一版刻意不强依赖 PyYAML，避免把流程 A 的最小环境门槛抬高。
+
+    Args:
+        path (Path): metadata.yaml 路径。
+
+    Returns:
+        dict[str, Any]: 解析后的 metadata 字典。
+    """
     data: dict[str, Any] = {}
     if not path.exists():
         return data
@@ -141,6 +246,14 @@ def load_metadata_yaml(path: Path) -> dict[str, Any]:
 
 
 def parse_scalar(value: str) -> Any:
+    """解析 metadata 简单标量值。
+
+    Args:
+        value (str): 冒号右侧的原始字符串。
+
+    Returns:
+        Any: 字符串、布尔值、整数、列表或空字符串。
+    """
     if value in {"", "null", "None", "~"}:
         return ""
     if value.lower() == "true":
@@ -165,6 +278,16 @@ def parse_scalar(value: str) -> Any:
 
 
 def metadata_value(metadata: dict[str, Any], *keys: str, default: str = "") -> str:
+    """按候选键顺序读取第一个非空 metadata 值。
+
+    Args:
+        metadata (dict[str, Any]): metadata 字典。
+        *keys (str): 候选字段名。
+        default (str): 所有候选都为空时返回的默认值。
+
+    Returns:
+        str: 第一个非空值的字符串形式。
+    """
     for key in keys:
         value = metadata.get(key)
         if value not in (None, ""):
@@ -173,6 +296,16 @@ def metadata_value(metadata: dict[str, Any], *keys: str, default: str = "") -> s
 
 
 def metadata_bool(metadata: dict[str, Any], key: str, default: bool = False) -> bool:
+    """读取 metadata 布尔值，兼容中文和常见字符串写法。
+
+    Args:
+        metadata (dict[str, Any]): metadata 字典。
+        key (str): 字段名。
+        default (bool): 字段缺失时的默认值。
+
+    Returns:
+        bool: 解析后的布尔值。
+    """
     value = metadata.get(key, default)
     if isinstance(value, bool):
         return value
@@ -203,6 +336,16 @@ def latex_escape(
     convert_quotes: bool = True,
     quote_state: dict[str, bool] | None = None,
 ) -> str:
+    """转义普通正文可安全写入 LaTeX。
+
+    Args:
+        text (Any): 待转义文本。
+        convert_quotes (bool): 是否把 ASCII 双引号转换为 LaTeX 左右引号。
+        quote_state (dict[str, bool] | None): 跨片段共享的引号开闭状态。
+
+    Returns:
+        str: 已转义的 LaTeX 普通正文片段。
+    """
     if text is None:
         return ""
     next_quote_is_opening = True
@@ -223,6 +366,15 @@ def latex_escape(
 
 
 def block_summary(text: str, limit: int = 80) -> str:
+    """生成单行文本摘要。
+
+    Args:
+        text (str): 原始文本。
+        limit (int): 摘要最大字符数。
+
+    Returns:
+        str: 压缩空白并截断后的摘要。
+    """
     compact = re.sub(r"\s+", " ", text or "").strip()
     if len(compact) <= limit:
         return compact
@@ -230,6 +382,15 @@ def block_summary(text: str, limit: int = 80) -> str:
 
 
 def classify_text(text: str, style_name: str = "") -> tuple[str, float]:
+    """对 Word 文本块做轻量候选类型分类。
+
+    Args:
+        text (str): 段落或单元格文本。
+        style_name (str): Word 样式名称。
+
+    Returns:
+        tuple[str, float]: 候选类型和置信度。
+    """
     stripped = (text or "").strip()
     lower_style = (style_name or "").lower()
     if not stripped:

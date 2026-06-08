@@ -6,32 +6,89 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from common import latex_escape, load_metadata_yaml, metadata_bool, metadata_value, now_iso, print_json, read_json, rel, safe_resolve_under, write_json
+from typing import Any
+
+from common import (
+    latex_escape,
+    load_metadata_yaml,
+    metadata_bool,
+    metadata_value,
+    now_iso,
+    print_json,
+    read_json,
+    rel,
+    safe_resolve_under,
+    write_json,
+)
 
 
-def list_or_text(value) -> str:
+def list_or_text(value: Any) -> str:
+    """把 metadata 中的列表或标量统一转为模板字符串。
+
+    Args:
+        value (Any): 关键词列表、标量或空值。
+
+    Returns:
+        str: 使用中文分号连接后的文本。
+    """
     if isinstance(value, list):
         return "；".join(str(item) for item in value)
     return "" if value is None else str(value)
 
 
 def metadata_true(metadata: dict, key: str) -> bool:
+    """读取 metadata 中的真值字段。
+
+    Args:
+        metadata (dict): metadata 字典。
+        key (str): 字段名。
+
+    Returns:
+        bool: 字段按 metadata 布尔规则解析后的结果。
+    """
     return metadata_bool(metadata, key, default=False)
 
 
 def generated_english_requires_confirmation(thesis_meta: dict) -> bool:
+    """判断英文摘要或关键词是否属于需授权的生成内容。
+
+    Args:
+        thesis_meta (dict): ``thesis.json`` 中的 metadata 字段。
+
+    Returns:
+        bool: 英文内容被标记为生成时返回 True。
+    """
     source = str(thesis_meta.get("english_content_source") or "").strip().lower()
     if source == "generated":
         return True
     generated = thesis_meta.get("generated_content") or []
-    if isinstance(generated, list) and any(str(item).startswith(("abstract_en", "keywords_en")) for item in generated):
+    if isinstance(generated, list) and any(
+        str(item).startswith(("abstract_en", "keywords_en")) for item in generated
+    ):
         return True
-    return bool(thesis_meta.get("abstract_en_generated") or thesis_meta.get("keywords_en_generated"))
+    return bool(
+        thesis_meta.get("abstract_en_generated")
+        or thesis_meta.get("keywords_en_generated")
+    )
 
 
 def render(root: Path, metadata_path: Path, thesis_path: Path | None) -> dict:
+    """把已确认 metadata 和摘要关键词渲染到 basicinfo.tex。
+
+    Args:
+        root (Path): ZUFE-Thesis 模板根目录。
+        metadata_path (Path): ``workspace/input/metadata.yaml`` 路径。
+        thesis_path (Path | None): ``workspace/intermediate/thesis.json`` 路径。
+
+    Returns:
+        dict: 渲染结果；缺关键确认信息时返回 blocked。
+    """
     metadata = load_metadata_yaml(metadata_path)
-    thesis = read_json(thesis_path, default={}) if thesis_path and thesis_path.exists() else {}
+    thesis = (
+        read_json(thesis_path, default={})
+        if thesis_path and thesis_path.exists()
+        else {}
+    )
     thesis_meta = thesis.get("metadata", {})
     abstracts = thesis_meta.get("abstracts", {})
     keywords = thesis_meta.get("keywords", {})
@@ -47,7 +104,10 @@ def render(root: Path, metadata_path: Path, thesis_path: Path | None) -> dict:
             "detail": "报告类型不能默认推断；必须由 Word 证据或用户确认 report_style=0/1。",
             "next_steps": ["先回到流程 A 确认报告类型，再渲染 basicinfo.tex。"],
         }
-    if generated_english_requires_confirmation(thesis_meta) and not metadata_true(metadata, "allow_generated_english"):
+    if generated_english_requires_confirmation(thesis_meta) and not metadata_true(
+        metadata,
+        "allow_generated_english",
+    ):
         return {
             "flow": "B",
             "step": "render_basicinfo",
@@ -58,11 +118,19 @@ def render(root: Path, metadata_path: Path, thesis_path: Path | None) -> dict:
         }
     has_subtitle = metadata_bool(metadata, "has_subtitle", default=False)
     title_cn = metadata_value(metadata, "thesis_title_cn", "title_cn", "title", default="")
-    title_abs_cn = metadata_value(metadata, "thesis_title_abs_cn", "title_abs_cn", "thesisTitleAbs", default="")
+    title_abs_cn = metadata_value(
+        metadata,
+        "thesis_title_abs_cn",
+        "title_abs_cn",
+        "thesisTitleAbs",
+        default="",
+    )
     title_en = metadata_value(metadata, "thesis_title_en", "title_en", default="")
     subtitle_cn = metadata_value(metadata, "thesis_subtitle_cn", "subtitle_cn", default="")
     subtitle_en = metadata_value(metadata, "thesis_subtitle_en", "subtitle_en", default="")
-    abstract_cn = thesis_meta.get("abstract_cn") or abstracts.get("cn") or abstracts.get("zh") or ""
+    abstract_cn = (
+        thesis_meta.get("abstract_cn") or abstracts.get("cn") or abstracts.get("zh") or ""
+    )
     abstract_en = thesis_meta.get("abstract_en") or abstracts.get("en") or ""
     keywords_cn = thesis_meta.get("keywords_cn") or keywords.get("cn") or keywords.get("zh") or ""
     keywords_en = thesis_meta.get("keywords_en") or keywords.get("en") or ""
@@ -75,20 +143,38 @@ def render(root: Path, metadata_path: Path, thesis_path: Path | None) -> dict:
         f"\\newcommand{{\\reportStyle}}{{{latex_escape(report_style)}}}",
         "",
         f"\\newcommand{{\\thesisTitle}}{{{latex_escape(title_cn)}}}",
-        *([f"\\newcommand{{\\thesisTitleAbs}}{{{latex_escape(title_abs_cn)}}}"] if title_abs_cn else []),
+        *(
+            [f"\\newcommand{{\\thesisTitleAbs}}{{{latex_escape(title_abs_cn)}}}"]
+            if title_abs_cn
+            else []
+        ),
         f"\\newcommand{{\\thesisTitleEN}}{{{latex_escape(title_en)}}}",
         "",
         "\\haveSub{}" if has_subtitle else "% \\haveSub{}",
         f"\\newcommand{{\\thesisSubTitle}}{{{latex_escape(subtitle_cn)}}}",
         f"\\newcommand{{\\thesisSubTitleEN}}{{{latex_escape(subtitle_en)}}}",
         "",
-        f"\\newcommand{{\\deptName}}{{{latex_escape(metadata_value(metadata, 'college', 'deptName', default=''))}}}",
-        f"\\newcommand{{\\majorName}}{{{latex_escape(metadata_value(metadata, 'major', 'majorName', default=''))}}}",
-        f"\\newcommand{{\\yourName}}{{{latex_escape(metadata_value(metadata, 'name', 'yourName', default=''))}}}",
-        f"\\newcommand{{\\yourStudentID}}{{{latex_escape(metadata_value(metadata, 'student_id', 'studentID', default=''))}}}",
-        f"\\newcommand{{\\mentorName}}{{{latex_escape(metadata_value(metadata, 'mentor', 'mentorName', default=''))}}}",
-        f"\\newcommand{{\\className}}{{{latex_escape(metadata_value(metadata, 'class_name', 'className', default=''))}}}",
-        f"\\newcommand{{\\Today}}{{{latex_escape(metadata_value(metadata, 'date', 'today', default=''))}}}",
+        "\\newcommand{\\deptName}{"
+        f"{latex_escape(metadata_value(metadata, 'college', 'deptName', default=''))}"
+        "}",
+        "\\newcommand{\\majorName}{"
+        f"{latex_escape(metadata_value(metadata, 'major', 'majorName', default=''))}"
+        "}",
+        "\\newcommand{\\yourName}{"
+        f"{latex_escape(metadata_value(metadata, 'name', 'yourName', default=''))}"
+        "}",
+        "\\newcommand{\\yourStudentID}{"
+        f"{latex_escape(metadata_value(metadata, 'student_id', 'studentID', default=''))}"
+        "}",
+        "\\newcommand{\\mentorName}{"
+        f"{latex_escape(metadata_value(metadata, 'mentor', 'mentorName', default=''))}"
+        "}",
+        "\\newcommand{\\className}{"
+        f"{latex_escape(metadata_value(metadata, 'class_name', 'className', default=''))}"
+        "}",
+        "\\newcommand{\\Today}{"
+        f"{latex_escape(metadata_value(metadata, 'date', 'today', default=''))}"
+        "}",
         "",
         "% 中英文摘要与关键词",
         f"\\newcommand{{\\abstractCN}}{{{latex_escape(abstract_cn)}}}",
@@ -113,9 +199,15 @@ def render(root: Path, metadata_path: Path, thesis_path: Path | None) -> dict:
             }
         )
         for block in thesis.get("source_blocks", []):
-            if block.get("target_slot") == "chapters/basicinfo.tex" and block.get("status") == "mapped":
+            if (
+                block.get("target_slot") == "chapters/basicinfo.tex"
+                and block.get("status") == "mapped"
+            ):
                 block["status"] = "rendered"
-                block["render_result"] = {"path": "chapters/basicinfo.tex", "kind": "latex_macro"}
+                block["render_result"] = {
+                    "path": "chapters/basicinfo.tex",
+                    "kind": "latex_macro",
+                }
         write_json(thesis_path, thesis)
 
     return {
@@ -127,14 +219,27 @@ def render(root: Path, metadata_path: Path, thesis_path: Path | None) -> dict:
 
 
 def main() -> int:
+    """解析命令行参数并执行 basicinfo 渲染。
+
+    Returns:
+        int: 渲染通过时返回 0，否则返回 2。
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default=".")
     parser.add_argument("--metadata", default="workspace/input/metadata.yaml")
     parser.add_argument("--thesis-json", default="workspace/intermediate/thesis.json")
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
-    metadata_path = (root / args.metadata).resolve() if not Path(args.metadata).is_absolute() else Path(args.metadata).resolve()
-    thesis_path = (root / args.thesis_json).resolve() if not Path(args.thesis_json).is_absolute() else Path(args.thesis_json).resolve()
+    metadata_path = (
+        (root / args.metadata).resolve()
+        if not Path(args.metadata).is_absolute()
+        else Path(args.metadata).resolve()
+    )
+    thesis_path = (
+        (root / args.thesis_json).resolve()
+        if not Path(args.thesis_json).is_absolute()
+        else Path(args.thesis_json).resolve()
+    )
     result = render(root, metadata_path, thesis_path)
     print_json(result)
     return 0 if result["status"] == "passed" else 2

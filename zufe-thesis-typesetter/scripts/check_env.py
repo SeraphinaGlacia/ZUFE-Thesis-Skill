@@ -19,6 +19,14 @@ REQUIRED_TEX_FILES = {
 
 
 def kpsewhich_exists(filename: str) -> bool:
+    """使用 kpsewhich 判断 TeX 文件是否可被当前发行版找到。
+
+    Args:
+        filename (str): 需要检查的 TeX 文件名，例如 ``ctexbook.cls``。
+
+    Returns:
+        bool: 文件可由 kpsewhich 解析时返回 True。
+    """
     if not command_exists("kpsewhich"):
         return False
     process = subprocess.run(
@@ -31,6 +39,14 @@ def kpsewhich_exists(filename: str) -> bool:
 
 
 def check(stage: str) -> dict:
+    """执行 Python、DOCX 和 LaTeX 环境门禁检查。
+
+    Args:
+        stage (str): 检查阶段，可为 ``minimal``、``latex`` 或 ``all``。
+
+    Returns:
+        dict: 流程 A 环境检查结果，包含每个依赖项的状态和修复提示。
+    """
     checks = [item("python", "passed", f"Python 可运行：{sys.executable}")]
     if stage in {"minimal", "all"}:
         if importlib.util.find_spec("docx") is None:
@@ -59,7 +75,13 @@ def check(stage: str) -> dict:
                 )
         for filename, detail in REQUIRED_TEX_FILES.items():
             if kpsewhich_exists(filename):
-                checks.append(item(f"tex_package_{filename}", "passed", f"{filename} 可由 kpsewhich 找到。"))
+                checks.append(
+                    item(
+                        f"tex_package_{filename}",
+                        "passed",
+                        f"{filename} 可由 kpsewhich 找到。",
+                    )
+                )
             else:
                 checks.append(
                     item(
@@ -83,6 +105,11 @@ def check(stage: str) -> dict:
 
 
 def main() -> int:
+    """解析命令行参数并输出环境检查 JSON。
+
+    Returns:
+        int: 环境门禁通过时返回 0，否则返回 2。
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default=".", help="保持接口一致，当前脚本不读取该目录。")
     parser.add_argument("--stage", choices=["minimal", "latex", "all"], default="all")

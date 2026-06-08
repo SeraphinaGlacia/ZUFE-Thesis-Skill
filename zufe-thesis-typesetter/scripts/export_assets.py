@@ -12,6 +12,16 @@ from common import print_json, read_json, rel, safe_resolve_under, write_json
 
 
 def export_assets(root: Path, docx_path: Path, thesis_path: Path) -> dict:
+    """从 DOCX 复制媒体资源并回写 thesis.json 资源证据。
+
+    Args:
+        root (Path): ZUFE-Thesis 模板根目录。
+        docx_path (Path): 标准输入 DOCX 路径。
+        thesis_path (Path): ``workspace/intermediate/thesis.json`` 路径。
+
+    Returns:
+        dict: 资源导出结果，包含已复制媒体文件列表。
+    """
     output_dir = safe_resolve_under(root, "Images/word_media", "Images")
     output_dir.mkdir(parents=True, exist_ok=True)
     extracted = []
@@ -50,14 +60,27 @@ def export_assets(root: Path, docx_path: Path, thesis_path: Path) -> dict:
 
 
 def main() -> int:
+    """解析命令行参数并执行 DOCX 媒体导出。
+
+    Returns:
+        int: 导出脚本固定返回 0；具体风险由流程 B 门禁继续判断。
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default=".")
     parser.add_argument("--docx", default="workspace/input/thesis.docx")
     parser.add_argument("--thesis-json", default="workspace/intermediate/thesis.json")
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
-    docx_path = (root / args.docx).resolve() if not Path(args.docx).is_absolute() else Path(args.docx).resolve()
-    thesis_path = (root / args.thesis_json).resolve() if not Path(args.thesis_json).is_absolute() else Path(args.thesis_json).resolve()
+    docx_path = (
+        (root / args.docx).resolve()
+        if not Path(args.docx).is_absolute()
+        else Path(args.docx).resolve()
+    )
+    thesis_path = (
+        (root / args.thesis_json).resolve()
+        if not Path(args.thesis_json).is_absolute()
+        else Path(args.thesis_json).resolve()
+    )
     result = export_assets(root, docx_path, thesis_path)
     print_json(result)
     return 0

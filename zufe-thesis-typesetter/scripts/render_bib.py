@@ -10,6 +10,16 @@ from common import now_iso, print_json, read_json, rel, write_json
 
 
 def render(root: Path, thesis_path: Path, input_bib: Path | None) -> dict:
+    """渲染已确认参考文献到 Reference.bib。
+
+    Args:
+        root (Path): ZUFE-Thesis 模板根目录。
+        thesis_path (Path): ``workspace/intermediate/thesis.json`` 路径。
+        input_bib (Path | None): 用户额外提供的 BibTeX 文件路径。
+
+    Returns:
+        dict: 渲染结果；存在未确认参考文献时返回 needs_confirmation。
+    """
     thesis = read_json(thesis_path, default={}) if thesis_path.exists() else {}
     entries = []
     warnings = []
@@ -66,14 +76,27 @@ def render(root: Path, thesis_path: Path, input_bib: Path | None) -> dict:
 
 
 def main() -> int:
+    """解析命令行参数并执行 BibTeX 渲染。
+
+    Returns:
+        int: 无参考文献确认风险时返回 0，否则返回 2。
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default=".")
     parser.add_argument("--thesis-json", default="workspace/intermediate/thesis.json")
     parser.add_argument("--input-bib", default="workspace/input/references.bib")
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
-    thesis_path = (root / args.thesis_json).resolve() if not Path(args.thesis_json).is_absolute() else Path(args.thesis_json).resolve()
-    input_bib = (root / args.input_bib).resolve() if not Path(args.input_bib).is_absolute() else Path(args.input_bib).resolve()
+    thesis_path = (
+        (root / args.thesis_json).resolve()
+        if not Path(args.thesis_json).is_absolute()
+        else Path(args.thesis_json).resolve()
+    )
+    input_bib = (
+        (root / args.input_bib).resolve()
+        if not Path(args.input_bib).is_absolute()
+        else Path(args.input_bib).resolve()
+    )
     result = render(root, thesis_path, input_bib)
     print_json(result)
     return 0 if result["status"] == "passed" else 2

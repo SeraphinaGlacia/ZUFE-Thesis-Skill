@@ -21,6 +21,15 @@ COMPILE_CHAIN = [
 
 
 def move_if_exists(source: Path, target: Path) -> str | None:
+    """如果源文件存在，则移动到归档位置。
+
+    Args:
+        source (Path): 待移动的源文件。
+        target (Path): 目标归档路径。
+
+    Returns:
+        str | None: 已移动文件的目标路径；源文件不存在时返回 None。
+    """
     if not source.exists():
         return None
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -29,6 +38,14 @@ def move_if_exists(source: Path, target: Path) -> str | None:
 
 
 def prepare_build(root: Path) -> list[dict]:
+    """归档旧 PDF 和临时编译文件，避免误判旧产物。
+
+    Args:
+        root (Path): ZUFE-Thesis 模板根目录。
+
+    Returns:
+        list[dict]: 已归档文件的来源和目标路径。
+    """
     archived = []
     pdf_target = archive_path(root, "flow-c-before-build") / "main.pdf"
     moved_pdf = move_if_exists(root / "main.pdf", pdf_target)
@@ -43,6 +60,15 @@ def prepare_build(root: Path) -> list[dict]:
 
 
 def run_chain(root: Path, timeout: int) -> list[dict]:
+    """按固定顺序运行 XeLaTeX/Biber 编译链。
+
+    Args:
+        root (Path): ZUFE-Thesis 模板根目录。
+        timeout (int): 单个编译命令的超时时间，单位为秒。
+
+    Returns:
+        list[dict]: 每一步命令的退出码、时间和日志路径。
+    """
     output_dir = root / "workspace/output"
     output_dir.mkdir(parents=True, exist_ok=True)
     results = []
@@ -65,7 +91,10 @@ def run_chain(root: Path, timeout: int) -> list[dict]:
             output = f"command not found: {command[0]}\n{exc}\n"
             exit_code = 127
         except subprocess.TimeoutExpired as exc:
-            output = (exc.stdout or "") + f"\ncommand timed out after {timeout} seconds: {' '.join(command)}\n"
+            output = (exc.stdout or "") + (
+                f"\ncommand timed out after {timeout} seconds: "
+                f"{' '.join(command)}\n"
+            )
             exit_code = 124
         ended = now_iso()
         log_path = output_dir / f"build-step-{index}-{'-'.join(command)}.log"
@@ -86,13 +115,26 @@ def run_chain(root: Path, timeout: int) -> list[dict]:
 
 
 def build(root: Path, timeout: int) -> dict:
+    """执行流程 C 编译并写入构建报告。
+
+    Args:
+        root (Path): ZUFE-Thesis 模板根目录。
+        timeout (int): 单个编译命令的超时时间，单位为秒。
+
+    Returns:
+        dict: 构建结果，同时写入 ``build_result.json`` 和 ``report.md``。
+    """
     start_time = time.time()
     archived = prepare_build(root)
     steps = run_chain(root, timeout)
     pdf = root / "main.pdf"
     new_pdf = pdf.exists() and pdf.stat().st_mtime >= start_time
     failed_steps = [step for step in steps if step["exit_code"] != 0]
-    status = "passed" if new_pdf and not failed_steps and len(steps) == len(COMPILE_CHAIN) else "failed"
+    status = (
+        "passed"
+        if new_pdf and not failed_steps and len(steps) == len(COMPILE_CHAIN)
+        else "failed"
+    )
     result = {
         "flow": "C",
         "step": "build",
@@ -120,12 +162,20 @@ def build(root: Path, timeout: int) -> dict:
         "",
     ]
     for step in steps:
-        report.append(f"- `{' '.join(step['command'])}` -> `{step['exit_code']}` ({step['log']})")
+        report.append(
+            f"- `{' '.join(step['command'])}` -> "
+            f"`{step['exit_code']}` ({step['log']})"
+        )
     (output_dir / "report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
     return result
 
 
 def main() -> int:
+    """解析命令行参数并执行流程 C 构建。
+
+    Returns:
+        int: 构建通过时返回 0，否则返回 2。
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default=".")
     parser.add_argument("--timeout", type=int, default=600)

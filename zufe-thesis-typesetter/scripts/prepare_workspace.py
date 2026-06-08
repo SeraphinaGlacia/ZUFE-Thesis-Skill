@@ -11,12 +11,28 @@ from common import archive_path, ensure_workspace, item, overall_status, print_j
 
 
 def directory_has_payload(path: Path) -> bool:
+    """判断目录是否存在非系统缓存内容。
+
+    Args:
+        path (Path): 待检查目录。
+
+    Returns:
+        bool: 目录存在且包含非 ``.DS_Store`` 内容时返回 True。
+    """
     if not path.exists():
         return False
     return any(child.name != ".DS_Store" for child in path.iterdir())
 
 
 def archive_outputs(root: Path) -> list[str]:
+    """归档旧 intermediate/output 产物并重新创建空目录。
+
+    Args:
+        root (Path): ZUFE-Thesis 模板根目录。
+
+    Returns:
+        list[str]: 已归档目录的相对路径。
+    """
     moved = []
     archive_root = archive_path(root, "flow-a-old-outputs")
     for relative in ("workspace/intermediate", "workspace/output"):
@@ -31,7 +47,25 @@ def archive_outputs(root: Path) -> list[str]:
     return moved
 
 
-def prepare(root: Path, word: Path | None, move_word: bool, copy_word: bool, archive_existing: bool) -> dict:
+def prepare(
+    root: Path,
+    word: Path | None,
+    move_word: bool,
+    copy_word: bool,
+    archive_existing: bool,
+) -> dict:
+    """创建标准 workspace 并在用户批准后整理 Word 输入。
+
+    Args:
+        root (Path): ZUFE-Thesis 模板根目录。
+        word (Path | None): 用户提供的 Word 路径；未提供时检查标准路径。
+        move_word (bool): 是否移动 Word 到标准输入路径。
+        copy_word (bool): 是否复制 Word 到标准输入路径。
+        archive_existing (bool): 是否归档旧 intermediate/output 产物。
+
+    Returns:
+        dict: 流程 A workspace 与 Word 整理门禁结果。
+    """
     checks = []
     ensure_workspace(root)
     checks.append(item("workspace", "passed", "标准 workspace 目录已存在。"))
@@ -44,7 +78,14 @@ def prepare(root: Path, word: Path | None, move_word: bool, copy_word: bool, arc
     ]
     if old_payload and archive_existing:
         archived = archive_outputs(root)
-        checks.append(item("old_outputs", "passed", "旧 intermediate/output 产物已归档。", archived=archived))
+        checks.append(
+            item(
+                "old_outputs",
+                "passed",
+                "旧 intermediate/output 产物已归档。",
+                archived=archived,
+            )
+        )
     elif old_payload:
         checks.append(
             item(
@@ -64,14 +105,25 @@ def prepare(root: Path, word: Path | None, move_word: bool, copy_word: bool, arc
             item(
                 "word_input",
                 status,
-                "标准 thesis.docx 已存在。" if target.exists() else "没有提供 Word 文件，标准路径也不存在 thesis.docx。",
+                (
+                    "标准 thesis.docx 已存在。"
+                    if target.exists()
+                    else "没有提供 Word 文件，标准路径也不存在 thesis.docx。"
+                ),
                 target=rel(target, root),
             )
         )
     else:
         source = word.expanduser().resolve()
         if not source.exists():
-            checks.append(item("word_input", "blocked", "提供的 Word 文件不存在。", source=str(source)))
+            checks.append(
+                item(
+                    "word_input",
+                    "blocked",
+                    "提供的 Word 文件不存在。",
+                    source=str(source),
+                )
+            )
         elif source.suffix.lower() == ".doc":
             checks.append(
                 item(
@@ -82,7 +134,14 @@ def prepare(root: Path, word: Path | None, move_word: bool, copy_word: bool, arc
                 )
             )
         elif source.suffix.lower() != ".docx":
-            checks.append(item("word_input", "blocked", "第一版只接受 .docx 输入。", source=str(source)))
+            checks.append(
+                item(
+                    "word_input",
+                    "blocked",
+                    "第一版只接受 .docx 输入。",
+                    source=str(source),
+                )
+            )
         elif target.exists() and source != target.resolve():
             checks.append(
                 item(
@@ -94,19 +153,46 @@ def prepare(root: Path, word: Path | None, move_word: bool, copy_word: bool, arc
                 )
             )
         elif move_word and copy_word:
-            checks.append(item("word_input", "blocked", "只能选择 --move-word 或 --copy-word 其中一个。"))
+            checks.append(
+                item(
+                    "word_input",
+                    "blocked",
+                    "只能选择 --move-word 或 --copy-word 其中一个。",
+                )
+            )
         elif move_word:
             target.parent.mkdir(parents=True, exist_ok=True)
             if source != target.resolve():
                 shutil.move(str(source), str(target))
-            checks.append(item("word_input", "passed", "Word 文件已移动到标准路径。", target=rel(target, root)))
+            checks.append(
+                item(
+                    "word_input",
+                    "passed",
+                    "Word 文件已移动到标准路径。",
+                    target=rel(target, root),
+                )
+            )
         elif copy_word:
             target.parent.mkdir(parents=True, exist_ok=True)
             if source != target.resolve():
                 shutil.copy2(source, target)
-            checks.append(item("word_input", "passed", "Word 文件已复制到标准路径。", target=rel(target, root)))
+            checks.append(
+                item(
+                    "word_input",
+                    "passed",
+                    "Word 文件已复制到标准路径。",
+                    target=rel(target, root),
+                )
+            )
         elif source == target.resolve():
-            checks.append(item("word_input", "passed", "Word 文件已经在标准路径。", target=rel(target, root)))
+            checks.append(
+                item(
+                    "word_input",
+                    "passed",
+                    "Word 文件已经在标准路径。",
+                    target=rel(target, root),
+                )
+            )
         else:
             checks.append(
                 item(
@@ -134,6 +220,11 @@ def prepare(root: Path, word: Path | None, move_word: bool, copy_word: bool, arc
 
 
 def main() -> int:
+    """解析命令行参数并执行 workspace 预准备。
+
+    Returns:
+        int: 门禁通过时返回 0，否则返回 2。
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default=".")
     parser.add_argument("--word", type=Path)

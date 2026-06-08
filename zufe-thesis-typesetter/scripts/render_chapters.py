@@ -7,14 +7,40 @@ import argparse
 from collections import defaultdict
 from pathlib import Path
 
-from common import latex_escape, now_iso, print_json, read_json, rel, safe_resolve_under, write_json
+from common import (
+    latex_escape,
+    now_iso,
+    print_json,
+    read_json,
+    rel,
+    safe_resolve_under,
+    write_json,
+)
 
 
 def tex_heading(text: str, command: str) -> str:
+    """渲染 LaTeX 标题命令。
+
+    Args:
+        text (str): 标题文本。
+        command (str): LaTeX 标题命令名，例如 ``chapter``。
+
+    Returns:
+        str: 已转义的标题命令。
+    """
     return f"\\{command}{{{latex_escape(text)}}}"
 
 
 def formatted_run_to_latex(run: dict, quote_state: dict[str, bool] | None = None) -> str:
+    """把单个 Word run 渲染为 LaTeX 片段。
+
+    Args:
+        run (dict): ``thesis.json`` 中的 run 级格式证据。
+        quote_state (dict[str, bool] | None): 跨 run 共享的 ASCII 引号状态。
+
+    Returns:
+        str: 保留粗体、斜体、上下标后的 LaTeX 片段。
+    """
     text = latex_escape(run.get("text") or "", quote_state=quote_state)
     if not text:
         return ""
@@ -30,6 +56,14 @@ def formatted_run_to_latex(run: dict, quote_state: dict[str, bool] | None = None
 
 
 def runs_to_latex(block: dict) -> str | None:
+    """把源块中的 runs 合并渲染为 LaTeX。
+
+    Args:
+        block (dict): ``thesis.json`` 源块。
+
+    Returns:
+        str | None: 渲染后的 run 文本；没有可渲染 run 时返回 None。
+    """
     runs = block.get("runs") or []
     if not runs:
         return None
@@ -39,6 +73,15 @@ def runs_to_latex(block: dict) -> str | None:
 
 
 def table_needs_wrapping(rows: list[list[str]], col_count: int) -> bool:
+    """判断表格是否需要使用固定宽度列换行。
+
+    Args:
+        rows (list[list[str]]): 表格行数据。
+        col_count (int): 表格列数。
+
+    Returns:
+        bool: 列数多或单元格较长时返回 True。
+    """
     if col_count > 4:
         return True
     for row in rows:
@@ -50,12 +93,29 @@ def table_needs_wrapping(rows: list[list[str]], col_count: int) -> bool:
 
 
 def table_cell_to_latex(cell: str) -> str:
+    """渲染单个表格单元格文本。
+
+    Args:
+        cell (str): 单元格原始文本。
+
+    Returns:
+        str: 已转义并保留换行语义的 LaTeX 单元格文本。
+    """
     lines = [latex_escape(line.strip()) for line in str(cell or "").splitlines()]
     lines = [line for line in lines if line]
     return r"\newline ".join(lines)
 
 
 def table_column_spec(rows: list[list[str]], col_count: int) -> str:
+    """根据表格形状生成 tabular 列格式。
+
+    Args:
+        rows (list[list[str]]): 表格行数据。
+        col_count (int): 表格列数。
+
+    Returns:
+        str: tabular 列格式字符串。
+    """
     if col_count <= 0:
         return "l"
     if not table_needs_wrapping(rows, col_count):
@@ -77,6 +137,14 @@ def table_column_spec(rows: list[list[str]], col_count: int) -> str:
 
 
 def table_to_latex(block: dict) -> str:
+    """把 table 源块渲染为 LaTeX table 环境。
+
+    Args:
+        block (dict): ``source_type=table`` 的源块。
+
+    Returns:
+        str: LaTeX 表格环境。
+    """
     rows = block.get("table", {}).get("rows", [])
     if not rows:
         return "% 空表格源块"
@@ -84,7 +152,9 @@ def table_to_latex(block: dict) -> str:
     body = []
     for index, row in enumerate(rows):
         padded = row + [""] * (col_count - len(row))
-        body.append("    " + " & ".join(table_cell_to_latex(cell) for cell in padded) + r" \\")
+        body.append(
+            "    " + " & ".join(table_cell_to_latex(cell) for cell in padded) + r" \\"
+        )
         if index == 0 and len(rows) > 1:
             body.append(r"    \midrule")
 
@@ -112,6 +182,14 @@ def table_to_latex(block: dict) -> str:
 
 
 def block_to_latex(block: dict) -> str:
+    """把单个已映射源块渲染为 LaTeX。
+
+    Args:
+        block (dict): ``thesis.json`` 源块。
+
+    Returns:
+        str: 源块对应的 LaTeX 文本。
+    """
     if block.get("latex"):
         return str(block["latex"])
     text = block.get("text") or block.get("summary") or ""
@@ -124,7 +202,9 @@ def block_to_latex(block: dict) -> str:
             [
                 "\\begin{figure}[htbp]",
                 "  \\centering",
-                f"  \\includegraphics[width=0.8\\textwidth]{{{latex_escape(path, convert_quotes=False)}}}",
+                "  \\includegraphics[width=0.8\\textwidth]{"
+                f"{latex_escape(path, convert_quotes=False)}"
+                "}",
                 f"  \\caption{{{latex_escape(caption)}}}",
                 "\\end{figure}",
             ]
@@ -143,13 +223,25 @@ def block_to_latex(block: dict) -> str:
 
 
 def grouped_chapters(thesis: dict) -> list[dict]:
+    """从结构信息或目标槽位推导章节渲染顺序。
+
+    Args:
+        thesis (dict): ``workspace/intermediate/thesis.json`` 数据。
+
+    Returns:
+        list[dict]: 章节条目列表，每项包含标题、文件和源块 ID。
+    """
     chapters = thesis.get("structure", {}).get("chapters") or []
     if chapters:
         return chapters
     grouped = defaultdict(list)
     for block in thesis.get("source_blocks", []):
         target = block.get("target_slot") or ""
-        if target.startswith("chapters/") and target.endswith(".tex") and target != "chapters/basicinfo.tex":
+        if (
+            target.startswith("chapters/")
+            and target.endswith(".tex")
+            and target != "chapters/basicinfo.tex"
+        ):
             grouped[target].append(block["id"])
     return [
         {"title": Path(target).stem, "file": target, "block_ids": block_ids}
@@ -158,6 +250,16 @@ def grouped_chapters(thesis: dict) -> list[dict]:
 
 
 def render(root: Path, thesis_path: Path, allow_incomplete: bool) -> dict:
+    """把已确认章节映射写入章节文件和 mainbody.tex。
+
+    Args:
+        root (Path): ZUFE-Thesis 模板根目录。
+        thesis_path (Path): ``workspace/intermediate/thesis.json`` 路径。
+        allow_incomplete (bool): 是否允许在仍有阻塞块时渲染。
+
+    Returns:
+        dict: 渲染结果；存在未确认源块时可返回 blocked。
+    """
     thesis = read_json(thesis_path)
     blocks_by_id = {block["id"]: block for block in thesis.get("source_blocks", [])}
     blocking = [
@@ -184,7 +286,12 @@ def render(root: Path, thesis_path: Path, allow_incomplete: bool) -> dict:
         try:
             target = safe_resolve_under(root, chapter["file"], "chapters")
         except ValueError as exc:
-            return {"flow": "B", "step": "render_chapters", "status": "blocked", "error": str(exc)}
+            return {
+                "flow": "B",
+                "step": "render_chapters",
+                "status": "blocked",
+                "error": str(exc),
+            }
         target_rel = rel(target, root)
         lines = [f"% Generated chapter: {chapter.get('title', target.stem)}", ""]
         for block_id in chapter.get("block_ids", []):
@@ -229,13 +336,22 @@ def render(root: Path, thesis_path: Path, allow_incomplete: bool) -> dict:
 
 
 def main() -> int:
+    """解析命令行参数并执行章节渲染。
+
+    Returns:
+        int: 渲染通过时返回 0，否则返回 2。
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default=".")
     parser.add_argument("--thesis-json", default="workspace/intermediate/thesis.json")
     parser.add_argument("--allow-incomplete", action="store_true")
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
-    thesis_path = (root / args.thesis_json).resolve() if not Path(args.thesis_json).is_absolute() else Path(args.thesis_json).resolve()
+    thesis_path = (
+        (root / args.thesis_json).resolve()
+        if not Path(args.thesis_json).is_absolute()
+        else Path(args.thesis_json).resolve()
+    )
     result = render(root, thesis_path, args.allow_incomplete)
     print_json(result)
     return 0 if result["status"] == "passed" else 2

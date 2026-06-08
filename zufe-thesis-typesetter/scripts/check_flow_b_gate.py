@@ -13,11 +13,32 @@ ACCEPTED_UNSUPPORTED_FEATURE_STATUSES = {"accepted_with_warning", "confirmed", "
 
 
 def rendered_source_text(root: Path) -> str:
-    chapters = sorted((root / "chapters").glob("*.tex")) if (root / "chapters").exists() else []
+    """读取所有章节源码用于流程 B 完成门禁反查。
+
+    Args:
+        root (Path): ZUFE-Thesis 模板根目录。
+
+    Returns:
+        str: 拼接后的章节 TeX 源码文本。
+    """
+    chapters = (
+        sorted((root / "chapters").glob("*.tex"))
+        if (root / "chapters").exists()
+        else []
+    )
     return "\n".join(path.read_text(encoding="utf-8", errors="ignore") for path in chapters)
 
 
 def count_runs_with_flag(blocks: list[dict], flag: str) -> int:
+    """统计已渲染源块中带指定 run 标记的数量。
+
+    Args:
+        blocks (list[dict]): ``thesis.json`` 中的源块列表。
+        flag (str): run 级布尔标记，例如 ``superscript``。
+
+    Returns:
+        int: 带该标记的 run 数量。
+    """
     count = 0
     for block in blocks:
         if block.get("status") != "rendered":
@@ -27,17 +48,40 @@ def count_runs_with_flag(blocks: list[dict], flag: str) -> int:
 
 
 def count_latex_command(source_text: str, command: str) -> int:
+    """统计章节源码中某个 LaTeX 命令的出现次数。
+
+    Args:
+        source_text (str): 章节源码文本。
+        command (str): 不含反斜杠的 LaTeX 命令名。
+
+    Returns:
+        int: 命令出现次数。
+    """
     return len(re.findall(rf"\\{command}\s*\{{", source_text))
 
 
 def check(root: Path, thesis_path: Path) -> dict:
+    """检查流程 B 是否满足进入流程 C 的完成门禁。
+
+    Args:
+        root (Path): ZUFE-Thesis 模板根目录。
+        thesis_path (Path): ``workspace/intermediate/thesis.json`` 路径。
+
+    Returns:
+        dict: 流程 B 完成门禁结果和阻塞问题列表。
+    """
     thesis = read_json(thesis_path)
     blocks = thesis.get("source_blocks", [])
     issues = []
 
     expected = thesis.get("counts", {}).get("total_source_blocks")
     if expected != len(blocks):
-        issues.append({"check": "source_block_count", "detail": f"账本记录 {expected} 个源块，实际找到 {len(blocks)} 个。"})
+        issues.append(
+            {
+                "check": "source_block_count",
+                "detail": f"账本记录 {expected} 个源块，实际找到 {len(blocks)} 个。",
+            }
+        )
 
     for feature in thesis.get("unsupported_features", []):
         if not feature.get("count"):
@@ -59,13 +103,41 @@ def check(root: Path, thesis_path: Path) -> dict:
         source_type = block.get("source_type")
         is_noise = status == "discarded_with_reason"
         if status not in FINAL_BLOCK_STATES:
-            issues.append({"check": "source_block_state", "block_id": block_id, "detail": f"状态仍是 {status}。"})
+            issues.append(
+                {
+                    "check": "source_block_state",
+                    "block_id": block_id,
+                    "detail": f"状态仍是 {status}。",
+                }
+            )
         if status == "discarded_with_reason" and not block.get("discard_reason"):
-            issues.append({"check": "discard_reason", "block_id": block_id, "detail": "丢弃源块没有记录原因。"})
+            issues.append(
+                {
+                    "check": "discard_reason",
+                    "block_id": block_id,
+                    "detail": "丢弃源块没有记录原因。",
+                }
+            )
         if status == "rendered" and not block.get("render_result"):
-            issues.append({"check": "render_result", "block_id": block_id, "detail": "已渲染源块没有 render_result。"})
-        if not is_noise and (text or source_type in {"table", "image"}) and not (block.get("target_slot") or block.get("discard_reason")):
-            issues.append({"check": "target_slot", "block_id": block_id, "detail": "非噪声源块没有目标槽位或丢弃原因。"})
+            issues.append(
+                {
+                    "check": "render_result",
+                    "block_id": block_id,
+                    "detail": "已渲染源块没有 render_result。",
+                }
+            )
+        if (
+            not is_noise
+            and (text or source_type in {"table", "image"})
+            and not (block.get("target_slot") or block.get("discard_reason"))
+        ):
+            issues.append(
+                {
+                    "check": "target_slot",
+                    "block_id": block_id,
+                    "detail": "非噪声源块没有目标槽位或丢弃原因。",
+                }
+            )
 
     required_targets = [
         "chapters/basicinfo.tex",
@@ -74,11 +146,26 @@ def check(root: Path, thesis_path: Path) -> dict:
     ]
     for target in required_targets:
         if not (root / target).exists():
-            issues.append({"check": "target_exists", "target": target, "detail": "必需目标文件不存在。"})
+            issues.append(
+                {
+                    "check": "target_exists",
+                    "target": target,
+                    "detail": "必需目标文件不存在。",
+                }
+            )
 
     mainbody = root / "chapters/mainbody.tex"
-    if mainbody.exists() and "\\input{chapters/" not in mainbody.read_text(encoding="utf-8", errors="ignore"):
-        issues.append({"check": "chapter_order", "target": "chapters/mainbody.tex", "detail": "没有检测到章节 input。"})
+    if mainbody.exists() and "\\input{chapters/" not in mainbody.read_text(
+        encoding="utf-8",
+        errors="ignore",
+    ):
+        issues.append(
+            {
+                "check": "chapter_order",
+                "target": "chapters/mainbody.tex",
+                "detail": "没有检测到章节 input。",
+            }
+        )
 
     source_text = rendered_source_text(root)
     superscript_runs = count_runs_with_flag(blocks, "superscript")
@@ -87,7 +174,10 @@ def check(root: Path, thesis_path: Path) -> dict:
         issues.append(
             {
                 "check": "superscript_rendering",
-                "detail": f"{superscript_runs} 个已渲染 Word 上标 run，但章节源码只检测到 {rendered_superscripts} 个 \\textsuperscript。",
+                "detail": (
+                    f"{superscript_runs} 个已渲染 Word 上标 run，"
+                    f"但章节源码只检测到 {rendered_superscripts} 个 \\textsuperscript。"
+                ),
             }
         )
     subscript_runs = count_runs_with_flag(blocks, "subscript")
@@ -96,7 +186,10 @@ def check(root: Path, thesis_path: Path) -> dict:
         issues.append(
             {
                 "check": "subscript_rendering",
-                "detail": f"{subscript_runs} 个已渲染 Word 下标 run，但章节源码只检测到 {rendered_subscripts} 个 \\textsubscript。",
+                "detail": (
+                    f"{subscript_runs} 个已渲染 Word 下标 run，"
+                    f"但章节源码只检测到 {rendered_subscripts} 个 \\textsubscript。"
+                ),
             }
         )
     if re.search(r"\\resizebox\s*\{\s*\\textwidth\s*\}\s*\{\s*!\s*\}", source_text):
@@ -121,12 +214,21 @@ def check(root: Path, thesis_path: Path) -> dict:
 
 
 def main() -> int:
+    """解析命令行参数并输出流程 B 完成门禁结果。
+
+    Returns:
+        int: 门禁通过时返回 0，否则返回 2。
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default=".")
     parser.add_argument("--thesis-json", default="workspace/intermediate/thesis.json")
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
-    thesis_path = (root / args.thesis_json).resolve() if not Path(args.thesis_json).is_absolute() else Path(args.thesis_json).resolve()
+    thesis_path = (
+        (root / args.thesis_json).resolve()
+        if not Path(args.thesis_json).is_absolute()
+        else Path(args.thesis_json).resolve()
+    )
     result = check(root, thesis_path)
     print_json(result)
     return 0 if result["status"] == "passed" else 2
