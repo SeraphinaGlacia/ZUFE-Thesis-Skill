@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/schoolLogo.png" alt="浙江财经大学校徽" width="120">
+</p>
+
 <h1 align="center">ZUFE-Thesis-Skill</h1>
 
 <div align="center">
