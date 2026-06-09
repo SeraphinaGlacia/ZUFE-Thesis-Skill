@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/schoolLogo.png" alt="浙江财经大学校徽" width="120">
+  <img src="assets/promo-poster-v2.png" alt="ZUFE-Thesis-Skill 宣传图" width="640">
 </p>
 
 <h1 align="center">ZUFE-Thesis-Skill</h1>
