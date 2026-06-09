@@ -6,7 +6,7 @@
 
 <div align="center">
 
-<h3>致谢</h3>
+<h3>致 谢</h3>
 
 <p>
   本 Skill 面向并配合
@@ -15,7 +15,9 @@
 </p>
 
 <p>
-  谨向模板作者石青学长，以及其所做的工作表示由衷的感谢。
+  谨向模板作者
+  <a href="https://github.com/sqsssq/">石青</a>
+  学长，以及其所做的工作表示由衷的感谢。
 </p>
 
 </div>
@@ -64,32 +66,32 @@
 > [!TIP]
 > 当然，你也会同时得到 `report.md`，`qa_report.md` 等用来记录转换过程、确认事项和相关说明的记录文档。如果你需要对工作过程进行检查，这些文档可以帮助你。
 
-## 那该如何使用呢？
+## 那该如何使用呢？（快速开始）
 
-先在 Kimi Work / Codex 等工具中打开一个完整的 ZUFE-Thesis 模板项目。
+1. 先在 Kimi Work / Codex 等工具中打开一个完整的 ZUFE-Thesis 模板项目。
 
-> [!WARNING]
-> 本 Skill 需要与模板项目存在于同一个工作区，请务必保证在已有的模板项目库中安装本 Skill，否则其将无法正常工作。
+  > [!WARNING]
+  > 本 Skill 需要与模板项目存在于同一个工作区，请务必保证在已有的模板项目库中安装本 Skill，否则其将无法正常工作。
 
-然后，在目标工作区安装本 Skill：
+2. 然后，在目标工作区安装本 Skill：
 
-```bash
-# 推荐使用 npx skills add 命令
-npx skills add SeraphinaGlacia/ZUFE-Thesis-Skill
-```
+  ```bash
+  # 推荐使用 npx skills add 命令
+  npx skills add SeraphinaGlacia/ZUFE-Thesis-Skill
+  ```
 
-将 Word 同样存放于工作区中，准备好后，直接在对话中说明你的目标，例如：
+3. 将 Word 同样存放于工作区中，准备好后，直接在对话中说明你的目标，例如：
 
-```text
-请帮我把 XXX.docx 转换为 LaTeX 工程和 PDF。
-```
+  ```text
+  请帮我把 XXX.docx 转换为 LaTeX 工程和 PDF。
+  ```
 
 通常而言，你不需要有任何 LaTeX 基础和环境配置基础，只要把 Word 文档交给 Agent 处理就可以了。你不需要过分担心会出现你无法处理的问题，Agent 会尽力帮你自动解决。
 
 Agent 会按流程检查模板、环境、输入文件和元数据，并开始写入、编译。当遇到不确定内容时，它也会先向你确认，而不是猜测。
 
 > [!WARNING]
-> 虽然 Agent 会尽量自动推进完整流程，但最终输出的 PDF 依旧可能存在一些错误，例如：缺失部分标点符号、标题重复编号、章节识别错误等，请务必对输出的 PDF 进行检查，并与 AI 进一步交流修改。（这通常不会花很多时间）
+> 虽然 Agent 会尽量自动推进完整流程，但最终输出的 PDF 依旧可能存在一些错误，例如：缺失部分标点符号、标题重复编号、章节识别错误等，请务必对输出的 PDF 进行检查，并与 AI 进一步交流修改。
 
 ## 如何保证可靠？
 
@@ -141,6 +143,9 @@ zufe-thesis-typesetter/
 </details>
 
 ## ⚠️ 注意
+
+> [!CAUTION]
+> 使用前请务必先备份原始 Word、模板工程和重要输出文件；任何因使用本 Skill 导致的文档损坏、内容丢失或数据丢失，均不由本项目承担责任。
 
 > [!WARNING]
 > 本项目是配合 [sqsssq/ZUFE-Thesis](https://github.com/sqsssq/ZUFE-Thesis) 使用的非官方辅助 Skill，不代表浙江财经大学官方工具，也不是原始模板项目的官方组成部分。最终格式仍以学校要求、导师要求和原始模板为准。
