@@ -76,7 +76,7 @@
 
 ## 状态规则
 
-- `needs_confirmation` 表示必须由 Codex 询问或基于明确证据确认后才能渲染。
+- `needs_confirmation` 表示必须由 Agent 询问或基于明确证据确认后才能渲染。
 - `blocked` 表示流程 B 必须停止。
 - `mapped` 表示已归属但还没写入。
 - `rendered` 必须有 `render_result`。
@@ -89,7 +89,7 @@
 - `text` 是便于检索和语义判断的纯文本；LaTeX 渲染不得只依赖 `text`。
 - 非空段落必须尽量写入 `runs`，记录 Word run 的 `bold`、`italic`、`superscript`、`subscript` 和 `font_size_pt`。
 - 若 `runs[].superscript=true`，渲染结果必须保留视觉上标，例如 `\textsuperscript{1}`。
-- 若上标数字实际是参考文献标号，Codex 可以在确认映射后改成引用命令；未确认前不得压平成普通数字。
+- 若上标数字实际是参考文献标号，Agent 可以在确认映射后改成引用命令；未确认前不得压平成普通数字。
 
 ## 英文内容决策
 
@@ -107,7 +107,7 @@
 
 - `omit`：用户确认留空。
 - `manual`：用户会手动提供英文摘要和英文关键词。
-- `generate`：用户允许 Codex 生成英文摘要和英文关键词。
+- `generate`：用户允许 Agent 生成英文摘要和英文关键词。
 
 选择 `manual` 或 `generate` 后，`metadata.abstract_en` 和 `metadata.keywords_en` 必须存在。生成内容还必须记录来源，例如 `english_content_source=generated`，并在 `metadata.yaml` 中记录 `allow_generated_english: true`。
 
@@ -147,7 +147,7 @@
 
 ## 已确认章节结构
 
-Codex 确认章节顺序后，写入：
+Agent 确认章节顺序后，写入：
 
 ```json
 {

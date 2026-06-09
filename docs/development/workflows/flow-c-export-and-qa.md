@@ -140,7 +140,7 @@ workspace/output/report.md
 workspace/output/qa_report.md
 ```
 
-`report.md` 面向 Codex 和技术用户，记录编译、修复、失败原因和日志位置。
+`report.md` 面向 Agent 和技术用户，记录编译、修复、失败原因和日志位置。
 
 `qa_report.md` 记录质检项、状态、证据和最终交付判定。
 
@@ -160,7 +160,7 @@ workspace/output/qa_report.md
 - 报告位置。
 - 必须处理的问题。
 
-## C.9 scripts 与 Codex 分工
+## C.9 scripts 与 Agent 分工
 
 scripts 负责稳定编译、日志解析和质检：
 
@@ -168,7 +168,7 @@ scripts 负责稳定编译、日志解析和质检：
 - `diagnose_build.py`：解析 `main.log`、`main.blg` 等日志，把问题分类为机械可修、需回 B、需用户补充或环境问题。
 - `qa.py`：检查 PDF 页数/文本、关键章节信号、未解析引用、模板蓝字、占位符和输出完整性。
 
-Codex 负责解释分类结果、决定是否执行机械修复、向用户说明风险，并在需要时引导回流程 B。
+Agent 负责解释分类结果、决定是否执行机械修复、向用户说明风险，并在需要时引导回流程 B。
 
 ## C.10 测试场景
 

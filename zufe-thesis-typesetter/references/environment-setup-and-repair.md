@@ -1,6 +1,6 @@
 # 环境安装与修复参考
 
-本文件只服务流程 A 和流程 C 的环境判断。普通用户不需要先阅读本文件；Codex 应把检查结果转成对话中的简短清单。
+本文件只服务流程 A 和流程 C 的环境判断。普通用户不需要先阅读本文件；Agent 应把检查结果转成对话中的简短清单。
 
 ## 适用规范与原则
 
@@ -9,7 +9,7 @@
 - 先给最小修复方案，再给完整发行版兜底方案。
 - 不把环境问题伪装成 Word 内容问题，也不把 LaTeX 原始日志直接丢给非技术用户。
 - Python 包、TeX 发行版、TeX 宏包、系统字体属于不同层级；修复时必须定位到具体层级。
-- `check_env.py` 输出 JSON 供 Codex 判断；面向用户时只说明卡在哪里、影响是什么、是否允许 Codex 修。
+- `check_env.py` 输出 JSON 供 Agent 判断；面向用户时只说明卡在哪里、影响是什么、是否允许 Agent 修。
 
 ## 依赖包与环境
 
@@ -22,7 +22,7 @@
 
 ### Python 包安装超时与镜像策略
 
-安装 Python 包前必须确认用户允许 Codex 修改当前 Python 环境。安装时优先使用短超时默认源：
+安装 Python 包前必须确认用户允许 Agent 修改当前 Python 环境。安装时优先使用短超时默认源：
 
 ```bash
 python -m pip install --timeout 8 --retries 1 python-docx
@@ -132,7 +132,7 @@ InitFile/schoolLogo.png
 - 样例图片
 - `InitFile/anonyLogo.png`
 
-缺少硬门禁文件时，不应通过安装 Python 包或 TeX 包修复。Codex 应提示用户当前目录不像 ZUFE-Thesis 模板根目录，要求用户切换到完整模板项目，或在用户批准后协助补齐模板文件。
+缺少硬门禁文件时，不应通过安装 Python 包或 TeX 包修复。Agent 应提示用户当前目录不像 ZUFE-Thesis 模板根目录，要求用户切换到完整模板项目，或在用户批准后协助补齐模板文件。
 
 ### 字体与模板资源
 

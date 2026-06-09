@@ -46,12 +46,12 @@ workspace/output/qa_report.md
 按顺序运行流程，不要因为后续脚本可能补救而跳过门禁。
 
 1. **流程 A**：检查模板、workspace、DOCX、metadata、旧输出、Python DOCX 环境、LaTeX/Biber 环境。
-2. **流程 B**：把 Word 每个可见或可抽取内容块写入 `thesis.json`；Codex 负责分配语义槽位并向用户确认低置信度内容；脚本只渲染已确认映射。
+2. **流程 B**：把 Word 每个可见或可抽取内容块写入 `thesis.json`；Agent 负责分配语义槽位并向用户确认低置信度内容；脚本只渲染已确认映射。
 3. **流程 C**：归档旧编译产物，运行 `xelatex -> biber -> xelatex -> xelatex`，诊断失败，做有限机械修复，并质检新 PDF。
 
 ## 脚本使用
 
-所有脚本接受 `--root`，并输出 JSON 或写入 JSON 报告。Codex 使用 JSON 做判断，再把结果翻译成普通用户能理解的简短清单。
+所有脚本接受 `--root`，并输出 JSON 或写入 JSON 报告。Agent 使用 JSON 做判断，再把结果翻译成普通用户能理解的简短清单。
 
 - `scripts/check_template.py`：检查 ZUFE-Thesis 模板签名。
 - `scripts/prepare_workspace.py`：创建 `workspace/`，把 DOCX 放到标准路径，并可在用户批准后归档旧输出。
@@ -67,9 +67,9 @@ workspace/output/qa_report.md
 - `scripts/diagnose_build.py`：把构建失败分类为可行动问题。
 - `scripts/qa.py`：检查 PDF 新鲜度、文本、关键信号、未解析引用、BibTeX/引用闭环、模板残留和占位符。
 
-## Codex 职责
+## Agent 职责
 
-Codex 负责语义判断，脚本不得替代：
+Agent 负责语义判断，脚本不得替代：
 
 - 判断段落属于章节标题、正文、摘要、参考文献、致谢、附录、图表标题或可丢弃噪声。
 - 归并低置信度问题，并向用户确认。
@@ -104,7 +104,7 @@ Codex 负责语义判断，脚本不得替代：
 
 - 门禁卡在哪里。
 - 为什么继续会不安全。
-- Codex 可以自动修什么。
+- Agent 可以自动修什么。
 - 哪些操作需要用户批准或提供文件。
 
 技术用户需要细节时，再补充报告路径。

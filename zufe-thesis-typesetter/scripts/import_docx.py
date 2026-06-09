@@ -246,7 +246,7 @@ def detect_unsupported_features(docx_path: Path) -> list[dict]:
         docx_path (Path): 标准输入 DOCX 路径。
 
     Returns:
-        list[dict]: 需要用户或 Codex 确认的 unsupported feature 列表。
+        list[dict]: 需要用户或 Agent 确认的 unsupported feature 列表。
     """
     features = []
     with zipfile.ZipFile(docx_path) as archive:
@@ -564,7 +564,7 @@ def extract(root: Path, docx_path: Path) -> dict:
         "source_blocks": blocks,
         "render_log": [],
         "warnings": [
-            "初始抽取会把非空内容标记为 needs_confirmation，Codex 确认目标槽位后才能渲染。",
+            "初始抽取会把非空内容标记为 needs_confirmation，Agent 确认目标槽位后才能渲染。",
             *(
                 ["检测到暂不自动转换的 Word 特性，必须确认或处理后才能通过流程 B。"]
                 if unsupported_features
@@ -586,7 +586,7 @@ def extract(root: Path, docx_path: Path) -> dict:
         "extracted_md": rel(intermediate / "extracted.md", root),
         "counts": thesis["counts"],
         "next_steps": [
-            "Codex 必须分配目标槽位并解决低置信度源块后再渲染。",
+            "Agent 必须分配目标槽位并解决低置信度源块后再渲染。",
             "只有映射和渲染完成后，才能运行 check_flow_b_gate.py 判断是否进入流程 C。",
         ],
     }

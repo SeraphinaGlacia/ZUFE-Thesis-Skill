@@ -204,7 +204,7 @@ def validate_english_content_choice(
             "missing_fields": missing + ["english_content_decision"],
             "detail": "英文摘要或英文关键词缺失，必须先让用户选择留空、手动提供或允许生成。",
             "next_steps": [
-                "询问用户：确认留空、手动提供英文摘要/关键词，或允许 Codex 生成。",
+                "询问用户：确认留空、手动提供英文摘要/关键词，或允许 Agent 生成。",
                 "将选择记录为 english_content_decision=omit/manual/generate。",
             ],
         }

@@ -79,4 +79,4 @@ workspace/input/thesis.docx
 
 ## 用户反馈
 
-失败时，在对话中说明卡住的门禁、原因和下一步。脚本可以写 JSON 供 Codex 使用，但普通用户不应该被要求先打开 Gate Report。
+失败时，在对话中说明卡住的门禁、原因和下一步。脚本可以写 JSON 供 Agent 使用，但普通用户不应该被要求先打开 Gate Report。

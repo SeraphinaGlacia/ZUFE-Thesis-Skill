@@ -30,7 +30,7 @@ workspace/input/metadata.yaml
 - 丢弃原因，如果被丢弃。
 - 渲染结果，如果已写入。
 
-`workspace/intermediate/extracted.md` 只作为人类和 Codex 辅助阅读材料，不承担审计职责。
+`workspace/intermediate/extracted.md` 只作为人类和 Agent 辅助阅读材料，不承担审计职责。
 
 ## 源块状态
 
@@ -38,7 +38,7 @@ workspace/input/metadata.yaml
 
 - `mapped`：已经归属到目标，但尚未渲染。
 - `rendered`：已经写入目标文件或资源。
-- `needs_confirmation`：需要用户或 Codex 明确确认。
+- `needs_confirmation`：需要用户或 Agent 明确确认。
 - `discarded_with_reason`：已经明确丢弃，并记录原因。
 - `blocked`：无法安全归属、丢弃或写入。
 
@@ -64,9 +64,9 @@ workspace/input/metadata.yaml
 
 不要修改 `zufe.cls`、`main.tex`、`misc/cover.tex`、`misc/abstract.tex` 或 `misc/reference.tex`。
 
-## Codex 与脚本分工
+## Agent 与脚本分工
 
-脚本采集证据并做确定性写入。Codex 做语义判断、槽位分配、风险归并和用户确认。
+脚本采集证据并做确定性写入。Agent 做语义判断、槽位分配、风险归并和用户确认。
 
 脚本不得编造参考文献，不得静默丢弃表格、图片或公式，也不得在低置信度时擅自猜测章节归属。
 
@@ -75,7 +75,7 @@ workspace/input/metadata.yaml
 `import_docx.py` 必须检测脚注、尾注、OMML 公式、超链接、批注、修订痕迹、文本框、页眉和页脚等暂不自动转换内容，并写入 `thesis.json.unsupported_features`。
 
 - 报告只记录类型、数量、位置和短摘要，不保存 XML、base64 或大段原文。
-- 默认状态为 `needs_confirmation`；用户或 Codex 明确处理后，可改为 `accepted_with_warning`、`confirmed` 或 `resolved`。
+- 默认状态为 `needs_confirmation`；用户或 Agent 明确处理后，可改为 `accepted_with_warning`、`confirmed` 或 `resolved`。
 - `check_flow_b_gate.py` 必须阻止未确认的 unsupported feature 进入流程 C。
 
 ## 图片锚点与资源导出
@@ -93,7 +93,7 @@ Word 段落中上标、下标是可见格式，属于必须保留的内容证据
 
 - `import_docx.py` 必须记录非空 run，不能只保存 `paragraph.text`。
 - `render_chapters.py` 必须把上标 run 渲染为 `\textsuperscript{...}`，把下标 run 渲染为 `\textsubscript{...}`。
-- 数字上标若疑似参考文献引用，Codex 可以在确认参考条目映射后改为引用命令；没有确认时，保留视觉上标是最低要求。
+- 数字上标若疑似参考文献引用，Agent 可以在确认参考条目映射后改为引用命令；没有确认时，保留视觉上标是最低要求。
 - QA 若发现 `thesis.json` 中存在上标 run，但章节源码没有对应 `\textsuperscript`，应给出风险提示。
 
 ## 正文 LaTeX 转写
@@ -115,7 +115,7 @@ Word 段落中上标、下标是可见格式，属于必须保留的内容证据
 ## 英文摘要与关键词
 
 - 如果 Word 没有英文摘要或英文关键词，不得默认留空，也不得直接根据中文内容自动补写。
-- 缺失英文摘要或英文关键词时，必须先让用户选择：`omit` 确认留空、`manual` 用户手动提供，或 `generate` 允许 Codex 生成。
+- 缺失英文摘要或英文关键词时，必须先让用户选择：`omit` 确认留空、`manual` 用户手动提供，或 `generate` 允许 Agent 生成。
 - 用户选择必须记录为 `english_content_decision=omit/manual/generate`。未记录选择时，`render_basicinfo.py` 必须阻止渲染 `chapters/basicinfo.tex`。
 - 选择 `manual` 或 `generate` 后，渲染前必须已经有英文摘要和英文关键词内容；否则继续阻止。
 - 需要生成英文摘要或英文关键词时，必须先告知用户这是内容性补写，并获得明确允许。

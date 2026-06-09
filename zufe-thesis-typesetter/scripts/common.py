@@ -157,7 +157,7 @@ def item(name: str, status: str, detail: str, **extra: Any) -> dict[str, Any]:
     Args:
         name (str): 检查项名称。
         status (str): 检查状态，例如 ``passed``、``blocked``。
-        detail (str): 面向 Codex 或用户的简短说明。
+        detail (str): 面向 Agent 或用户的简短说明。
         **extra (Any): 需要附加到检查项中的结构化字段。
 
     Returns:

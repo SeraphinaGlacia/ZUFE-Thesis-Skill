@@ -48,7 +48,7 @@ def read_log(root: Path, relative: str) -> str:
 
 
 def next_step(category: str) -> str:
-    """把诊断类别转换为面向 Codex 的下一步动作。
+    """把诊断类别转换为面向 Agent 的下一步动作。
 
     Args:
         category (str): 诊断类别。
