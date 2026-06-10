@@ -68,8 +68,8 @@
 
 1. 先准备一个完整的 ZUFE-Thesis 模板项目。
 
-  - 模板优先使用 GitHub 仓库：[ZUFE-Thesis](https://github.com/sqsssq/ZUFE-Thesis)。
-  - 如果 GitHub 因网络环境不可用，可以改用国内备用链接：[Gitee 镜像](https://gitee.com/cwf818/ZUFE-Thesis)。
+   - 模板优先使用 GitHub 仓库：[ZUFE-Thesis](https://github.com/sqsssq/ZUFE-Thesis)。
+   - 如果 GitHub 因网络环境不可用，可以改用国内备用链接：[Gitee 镜像](https://gitee.com/cwf818/ZUFE-Thesis)。
 
 2. 在 Kimi Work / Codex 等工具中打开这个完整的 ZUFE-Thesis 模板项目。
 
