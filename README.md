@@ -26,7 +26,6 @@
 
 本 Skill 依赖于原模板工作，如果没有它，本 Skill 也无从立足。本项目所做的，只是为它补充了更适合普通学生使用的 Agent Skill，让不会 LaTeX 的人，也能先享受到 LaTeX 规范排版带来的便利。
 
-> [!NOTE]
 > <details>
 > <summary>🤔 我为什么要做这个项目？（推荐看看！）</summary>
 >
@@ -43,6 +42,9 @@
 > </details>
 
 ---
+
+> [!IMPORTANT]
+> 本项目不代表浙江财经大学官方工具，也不是原始模板项目的官方组成部分。最终格式仍以学校要求、导师要求和原始模板为准。
 
 ## 我适合用这个 Skill 吗？
 
@@ -65,6 +67,9 @@
 当然，你也会同时得到 `report.md`，`qa_report.md` 等用来记录转换过程、确认事项和相关说明的记录文档。如果你需要对工作过程进行检查，这些文档可以帮助你。
 
 ## 那该如何使用呢？（快速开始）
+
+> [!CAUTION]
+> 使用前请务必先备份原始 Word 等重要文件；任何因使用本 Skill 导致的文档损坏、内容丢失或数据丢失，均不由本项目承担责任。
 
 1. 先准备一个完整的 ZUFE-Thesis 模板项目。
 
@@ -148,16 +153,9 @@ zufe-thesis-typesetter/
 
 </details>
 
-## ⚠️ 注意
+## 许可证与声明
 
-> [!CAUTION]
-> 使用前请务必先备份原始 Word、模板工程和重要输出文件；任何因使用本 Skill 导致的文档损坏、内容丢失或数据丢失，均不由本项目承担责任。
-
-> [!IMPORTANT]
-> 本项目是配合 [sqsssq/ZUFE-Thesis](https://github.com/sqsssq/ZUFE-Thesis) 使用的非官方辅助 Skill，不代表浙江财经大学官方工具，也不是原始模板项目的官方组成部分。最终格式仍以学校要求、导师要求和原始模板为准。
-
-> [!IMPORTANT]
-> 原始 ZUFE-Thesis 模板项目有其自身的作者和许可证；本仓库只维护与其相关的 Skill。本仓库代码以 GNU AGPL-3.0 发布，详见 [LICENSE](LICENSE)。
+原始 ZUFE-Thesis 模板项目有其自身的作者和许可证；本仓库只维护与其相关的 Skill。本仓库代码以 GNU AGPL-3.0 发布，详见 [LICENSE](LICENSE)。
 
 ---
 
