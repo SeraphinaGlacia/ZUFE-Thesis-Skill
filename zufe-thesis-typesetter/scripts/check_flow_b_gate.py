@@ -7,7 +7,13 @@ import argparse
 import re
 from pathlib import Path
 
-from common import FINAL_BLOCK_STATES, print_json, read_json
+from common import (
+    FINAL_BLOCK_STATES,
+    latex_label_reference_issues,
+    manual_cross_reference_hits,
+    print_json,
+    read_json,
+)
 
 ACCEPTED_UNSUPPORTED_FEATURE_STATUSES = {"accepted_with_warning", "confirmed", "resolved"}
 
@@ -197,6 +203,35 @@ def check(root: Path, thesis_path: Path) -> dict:
             {
                 "check": "table_resizebox_textwidth",
                 "detail": "章节源码包含无条件 \\resizebox{\\textwidth}{!}，可能放大窄表并破坏字号。",
+            }
+        )
+    manual_reference_hits = manual_cross_reference_hits(source_text)
+    if manual_reference_hits:
+        issues.append(
+            {
+                "check": "manual_cross_reference_numbers",
+                "detail": (
+                    "章节源码仍包含手写图表编号；应由 Agent 确认映射后改写为 "
+                    "\\ref 引用。"
+                ),
+                "examples": manual_reference_hits,
+            }
+        )
+    label_reference_issues = latex_label_reference_issues(source_text)
+    if label_reference_issues["duplicate_labels"]:
+        issues.append(
+            {
+                "check": "duplicate_latex_labels",
+                "detail": "章节源码包含重复 label，会导致引用跳转不稳定。",
+                "labels": label_reference_issues["duplicate_labels"],
+            }
+        )
+    if label_reference_issues["undefined_refs"]:
+        issues.append(
+            {
+                "check": "undefined_latex_refs",
+                "detail": "章节源码包含没有对应 label 的 \\ref。",
+                "labels": label_reference_issues["undefined_refs"],
             }
         )
 

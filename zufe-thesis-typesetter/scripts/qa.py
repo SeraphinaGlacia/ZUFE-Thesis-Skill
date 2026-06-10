@@ -9,7 +9,13 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from common import print_json, read_json, write_json
+from common import (
+    latex_label_reference_issues,
+    manual_cross_reference_hits,
+    print_json,
+    read_json,
+    write_json,
+)
 
 
 PLACEHOLDER_PATTERNS = [
@@ -277,6 +283,34 @@ def source_quality_checks(root: Path) -> list[dict]:
             "name": "source_table_resizebox_textwidth",
             "status": "warning" if resize_hits else "passed",
             "detail": f"{len(resize_hits)} unguarded textwidth resizebox occurrence(s).",
+        }
+    )
+
+    manual_reference_hits = manual_cross_reference_hits(source_text)
+    checks.append(
+        {
+            "name": "source_manual_cross_reference_numbers",
+            "status": "failed" if manual_reference_hits else "passed",
+            "detail": "; ".join(manual_reference_hits) if manual_reference_hits else "none",
+        }
+    )
+    label_reference_issues = latex_label_reference_issues(source_text)
+    checks.append(
+        {
+            "name": "source_duplicate_latex_labels",
+            "status": "failed" if label_reference_issues["duplicate_labels"] else "passed",
+            "detail": ", ".join(label_reference_issues["duplicate_labels"])
+            if label_reference_issues["duplicate_labels"]
+            else "none",
+        }
+    )
+    checks.append(
+        {
+            "name": "source_undefined_latex_refs",
+            "status": "failed" if label_reference_issues["undefined_refs"] else "passed",
+            "detail": ", ".join(label_reference_issues["undefined_refs"])
+            if label_reference_issues["undefined_refs"]
+            else "none",
         }
     )
 
