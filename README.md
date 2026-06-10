@@ -51,7 +51,6 @@
 - 你正在写浙江财经大学本科毕业论文、专业实践报告或类似格式的课程论文。
 - 你已经有 Word 初稿，但不想把时间花在反复调格式上。
 - 你不熟悉 LaTeX，但希望得到可提交、可继续维护的 LaTeX 工程**或** PDF。
-
 - 你对于 Agent Skill 有基本的认知。
 - 你具备基本的操作 Agent 及其衍生工具（例如 Kimi Work、Codex）的能力。
 - 你愿意在 AI 对话中确认少量关键信息，并配合 Agent 执行工作。
@@ -63,16 +62,14 @@
 - `main.pdf`：按 ZUFE-Thesis 模板编译出的 PDF。
 - 可继续修改的 LaTeX 工程：包括章节、图片、参考文献和基础信息文件。
 
-> [!TIP]
+> [!NOTE]
 > 当然，你也会同时得到 `report.md`，`qa_report.md` 等用来记录转换过程、确认事项和相关说明的记录文档。如果你需要对工作过程进行检查，这些文档可以帮助你。
 
 ## 那该如何使用呢？（快速开始）
 
 1. 先准备一个完整的 ZUFE-Thesis 模板项目。
 
-   原始模板优先使用 GitHub 仓库：[sqsssq/ZUFE-Thesis](https://github.com/sqsssq/ZUFE-Thesis)。如果 GitHub 因网络环境不可用，可以改用国内备用链接：[Gitee - cwf818/ZUFE-Thesis](https://gitee.com/cwf818/ZUFE-Thesis)。
-
-   如果两个链接都无法使用，请让 Agent 暂停转换，并改为协助你使用手动下载的模板压缩包、已解压的完整模板目录，或其他可信来源。确认当前打开的是模板根目录之后，再继续安装和使用本 Skill。
+   模板优先使用 GitHub 仓库：[ZUFE-Thesis](https://github.com/sqsssq/ZUFE-Thesis)。如果 GitHub 因网络环境不可用，可以改用国内备用链接：[Gitee 镜像](https://gitee.com/cwf818/ZUFE-Thesis)。
 
 2. 在 Kimi Work / Codex 等工具中打开这个完整的 ZUFE-Thesis 模板项目。
 
@@ -97,7 +94,7 @@
 Agent 会按流程检查模板、环境、输入文件和元数据，并开始写入、编译。当遇到不确定内容时，它也会先向你确认，而不是猜测。
 
 > [!WARNING]
-> 虽然 Agent 会尽量自动推进完整流程，但最终输出的 PDF 依旧可能存在一些错误，例如：缺失部分标点符号、标题重复编号、章节识别错误等，请务必对输出的 PDF 进行检查，并与 AI 进一步交流修改。
+> 虽然 Agent 会尽量自动推进完整流程，但最终输出的 PDF 依旧可能存在一些错误，例如：缺失部分标点符号、标题重复编号、章节识别错误等，请务必对输出的 PDF 进行检查，并与 AI 进一步交流修改。不要未经检查直接提交。
 
 ## 如何保证可靠？
 
@@ -153,10 +150,10 @@ zufe-thesis-typesetter/
 > [!CAUTION]
 > 使用前请务必先备份原始 Word、模板工程和重要输出文件；任何因使用本 Skill 导致的文档损坏、内容丢失或数据丢失，均不由本项目承担责任。
 
-> [!WARNING]
+> [!IMPORTANT]
 > 本项目是配合 [sqsssq/ZUFE-Thesis](https://github.com/sqsssq/ZUFE-Thesis) 使用的非官方辅助 Skill，不代表浙江财经大学官方工具，也不是原始模板项目的官方组成部分。最终格式仍以学校要求、导师要求和原始模板为准。
 
-> [!WARNING]
+> [!IMPORTANT]
 > 原始 ZUFE-Thesis 模板项目有其自身的作者和许可证；本仓库只维护与其相关的 Skill。本仓库代码以 GNU AGPL-3.0 发布，详见 [LICENSE](LICENSE)。
 
 ---
