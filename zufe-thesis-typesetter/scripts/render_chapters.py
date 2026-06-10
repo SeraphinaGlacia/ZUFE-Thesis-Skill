@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from collections import defaultdict
 from pathlib import Path
 
@@ -18,6 +19,86 @@ from common import (
 )
 
 RENDERABLE_BLOCK_STATES = {"mapped", "rendered"}
+
+
+def latex_label_value(value: object) -> str:
+    """返回可安全放入 ``\\label{...}`` 的 label 值。
+
+    Args:
+        value (object): ``thesis.json`` 中的 label 字段值。
+
+    Returns:
+        str: 去掉首尾空白后的 label；包含大括号或反斜杠时返回空字符串。
+    """
+    label = str(value or "").strip()
+    if not label or any(char in label for char in "{}\\"):
+        return ""
+    return label
+
+
+def reference_prefix(kind: str) -> str:
+    """根据引用类型返回中文前缀。
+
+    Args:
+        kind (str): 引用类型，例如 ``figure``、``table`` 或 ``equation``。
+
+    Returns:
+        str: 引用前缀。
+    """
+    normalized = (kind or "").strip().lower()
+    if normalized in {"table", "tab"}:
+        return "表"
+    if normalized in {"equation", "formula", "eq"}:
+        return "式"
+    return "图"
+
+
+def reference_replacement(rewrite: dict) -> str:
+    """把已确认引用改写规则渲染为 LaTeX 片段。
+
+    Args:
+        rewrite (dict): ``reference_rewrites`` 中的单条规则。
+
+    Returns:
+        str: 可直接写入正文的 LaTeX 引用；信息不足时为空字符串。
+    """
+    raw_latex = rewrite.get("latex") or rewrite.get("replacement_latex")
+    if raw_latex:
+        return str(raw_latex)
+    label = latex_label_value(rewrite.get("target_label") or rewrite.get("label"))
+    if not label:
+        return ""
+    prefix = rewrite.get("prefix") or reference_prefix(
+        str(rewrite.get("target_kind") or rewrite.get("kind") or rewrite.get("type") or "")
+    )
+    return f"{latex_escape(str(prefix))}~\\ref{{{label}}}"
+
+
+def apply_reference_rewrites(rendered_text: str, rewrites: list[dict] | None) -> str:
+    """把正文中的手写图表编号替换为已确认 LaTeX 引用。
+
+    Args:
+        rendered_text (str): 已转义的正文 LaTeX 文本。
+        rewrites (list[dict] | None): 引用改写规则。
+
+    Returns:
+        str: 替换后的 LaTeX 文本。
+    """
+    prepared = []
+    for rewrite in rewrites or []:
+        source = rewrite.get("source_text") or rewrite.get("original_text") or rewrite.get("text")
+        replacement = reference_replacement(rewrite)
+        if not source or not replacement:
+            continue
+        rendered_source = latex_escape(str(source))
+        prepared.append((rendered_source, replacement))
+    prepared.sort(key=lambda item: len(item[0]), reverse=True)
+    for rendered_source, replacement in prepared:
+        pattern = re.compile(
+            re.escape(rendered_source) + r"(?![0-9０-９.-])"
+        )
+        rendered_text = pattern.sub(lambda _match: replacement, rendered_text)
+    return rendered_text
 
 
 def tex_heading(text: str, command: str) -> str:
@@ -166,6 +247,9 @@ def table_to_latex(block: dict) -> str:
     ]
     if block.get("caption"):
         lines.append(f"  \\caption{{{latex_escape(block['caption'])}}}")
+        label = latex_label_value(block.get("label") or block.get("latex_label"))
+        if label:
+            lines.append(f"  \\label{{{label}}}")
     lines.extend(
         [
             r"  \zihao{5}",
@@ -200,6 +284,10 @@ def block_to_latex(block: dict) -> str:
     if block.get("source_type") == "image":
         path = block.get("asset_output") or block.get("target_slot") or ""
         caption = block.get("caption") or block.get("summary") or ""
+        label = latex_label_value(block.get("label") or block.get("latex_label"))
+        caption_lines = [f"  \\caption{{{latex_escape(caption)}}}"]
+        if label:
+            caption_lines.append(f"  \\label{{{label}}}")
         return "\n".join(
             [
                 "\\begin{figure}[htbp]",
@@ -207,7 +295,7 @@ def block_to_latex(block: dict) -> str:
                 "  \\includegraphics[width=0.8\\textwidth]{"
                 f"{latex_escape(path, convert_quotes=False)}"
                 "}",
-                f"  \\caption{{{latex_escape(caption)}}}",
+                *caption_lines,
                 "\\end{figure}",
             ]
         )
@@ -221,7 +309,9 @@ def block_to_latex(block: dict) -> str:
         return tex_heading(text, "subsection")
     if role == "heading":
         return tex_heading(text, "chapter")
-    return (runs_to_latex(block) or latex_escape(text)) + "\n"
+    rendered = runs_to_latex(block) or latex_escape(text)
+    rendered = apply_reference_rewrites(rendered, block.get("reference_rewrites"))
+    return rendered + "\n"
 
 
 def grouped_chapters(thesis: dict) -> list[dict]:

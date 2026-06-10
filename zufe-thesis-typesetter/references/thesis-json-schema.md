@@ -134,6 +134,42 @@
 - 若图片来自正文段落锚点，`evidence.anchor_paragraph_id` 和 `evidence.anchor_text` 记录位置证据。
 - `asset_status=pending_export` 表示资源尚未复制；`asset_status=exported` 表示 `asset_output` 已指向 `Images/word_media/...`。
 - `asset_status=exported` 不代表图片语义位置已确认。图片仍需通过 `target_slot` 或章节结构确认放入哪个章节文件。
+- 已确认的图片或表格若会被正文引用，必须写入稳定 `label`，并在渲染时紧跟 `\caption{...}` 输出 `\label{...}`。
+
+## 图表引用改写规则
+
+正文中的 `图2.1`、`图 2.1`、`表1.2` 等手写编号必须被识别。Agent 确认映射后，在正文源块写入：
+
+```json
+{
+  "id": "p0012",
+  "text": "具体可见图2.1。",
+  "reference_rewrites": [
+    {
+      "source_text": "图2.1",
+      "target_kind": "figure",
+      "target_label": "fig:age-distribution",
+      "confirmation": {
+        "confirmed_by": "agent",
+        "note": "根据相邻图题“年龄分布图”和图片顺序确认"
+      }
+    }
+  ]
+}
+```
+
+目标图片或表格源块需要有对应 label：
+
+```json
+{
+  "id": "img0001",
+  "source_type": "image",
+  "caption": "年龄分布图",
+  "label": "fig:age-distribution"
+}
+```
+
+`render_chapters.py` 会把上例渲染为 `图~\ref{fig:age-distribution}`。如果正文编号和图题编号互相矛盾，或一个编号对应多个候选图表，必须保持 `needs_confirmation` 或 `blocked`。
 
 ## 目标槽位示例
 

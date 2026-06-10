@@ -140,6 +140,75 @@ def test_render_chapters_preserves_superscript_and_heading_levels():
     ) == "``产品差异化''\n"
 
 
+def test_render_chapters_outputs_labels_and_reference_rewrites():
+    render_chapters = load_module("render_chapters")
+    figure_latex = render_chapters.block_to_latex(
+        {
+            "source_type": "image",
+            "asset_output": "Images/word_media/image3.png",
+            "caption": "年龄分布图",
+            "label": "fig:age-distribution",
+        }
+    )
+    assert r"\caption{年龄分布图}" in figure_latex
+    assert r"\label{fig:age-distribution}" in figure_latex
+
+    table_latex = render_chapters.block_to_latex(
+        {
+            "source_type": "table",
+            "caption": "样本信息",
+            "label": "tab:sample-info",
+            "table": {"rows": [["指标", "值"], ["样本", "205"]]},
+        }
+    )
+    assert r"\caption{样本信息}" in table_latex
+    assert r"\label{tab:sample-info}" in table_latex
+
+    paragraph_latex = render_chapters.block_to_latex(
+        {
+            "source_type": "paragraph",
+            "text": "具体可见图2.1和表 1.2。",
+            "reference_rewrites": [
+                {
+                    "source_text": "图2.1",
+                    "target_kind": "figure",
+                    "target_label": "fig:age-distribution",
+                },
+                {
+                    "source_text": "表 1.2",
+                    "target_kind": "table",
+                    "target_label": "tab:sample-info",
+                },
+            ],
+        }
+    )
+    assert "图2.1" not in paragraph_latex
+    assert "表 1.2" not in paragraph_latex
+    assert r"图~\ref{fig:age-distribution}" in paragraph_latex
+    assert r"表~\ref{tab:sample-info}" in paragraph_latex
+
+    overlapping_latex = render_chapters.block_to_latex(
+        {
+            "source_type": "paragraph",
+            "text": "见图2.1、图2.10。",
+            "reference_rewrites": [
+                {
+                    "source_text": "图2.1",
+                    "target_kind": "figure",
+                    "target_label": "fig:short",
+                },
+                {
+                    "source_text": "图2.10",
+                    "target_kind": "figure",
+                    "target_label": "fig:long",
+                },
+            ],
+        }
+    )
+    assert r"图~\ref{fig:short}、图~\ref{fig:long}" in overlapping_latex
+    assert r"\ref{fig:short}0" not in overlapping_latex
+
+
 def test_check_template_requires_new_fonts_directory_layout():
     check_template = load_module("check_template")
     base_signature = [
@@ -334,6 +403,107 @@ def test_flow_b_gate_blocks_unconfirmed_unsupported_features():
         result = check_flow_b_gate.check(root, thesis_path)
         assert result["status"] == "blocked"
         assert any(issue["check"] == "unsupported_feature_confirmation" for issue in result["issues"])
+
+
+def test_flow_b_gate_blocks_manual_figure_reference_numbers():
+    check_flow_b_gate = load_module("check_flow_b_gate")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "chapters").mkdir()
+        (root / "workspace/intermediate").mkdir(parents=True)
+        (root / "chapters/basicinfo.tex").write_text("基本信息\n", encoding="utf-8")
+        (root / "chapters/mainbody.tex").write_text("\\input{chapters/1_intro}\n", encoding="utf-8")
+        (root / "chapters/1_intro.tex").write_text(
+            "正文具体可见图2.1。\n"
+            "\\begin{figure}[htbp]\n"
+            "\\caption{年龄分布图}\n"
+            "\\label{fig:age-distribution}\n"
+            "\\end{figure}\n",
+            encoding="utf-8",
+        )
+        (root / "Reference.bib").write_text("% empty\n", encoding="utf-8")
+        thesis_path = root / "workspace/intermediate/thesis.json"
+        thesis_path.write_text(
+            json.dumps(
+                {
+                    "counts": {"total_source_blocks": 1},
+                    "unsupported_features": [],
+                    "source_blocks": [
+                        {
+                            "id": "p0001",
+                            "status": "rendered",
+                            "text": "正文具体可见图2.1。",
+                            "target_slot": "chapters/1_intro.tex",
+                            "render_result": {
+                                "path": "chapters/1_intro.tex",
+                                "kind": "chapter_tex",
+                            },
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        result = check_flow_b_gate.check(root, thesis_path)
+        assert result["status"] == "blocked"
+        issue = next(
+            issue for issue in result["issues"] if issue["check"] == "manual_cross_reference_numbers"
+        )
+        assert "图2.1" in issue["examples"][0]
+
+
+def test_flow_b_gate_blocks_broken_latex_label_refs():
+    check_flow_b_gate = load_module("check_flow_b_gate")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "chapters").mkdir()
+        (root / "workspace/intermediate").mkdir(parents=True)
+        (root / "chapters/basicinfo.tex").write_text("基本信息\n", encoding="utf-8")
+        (root / "chapters/mainbody.tex").write_text("\\input{chapters/1_intro}\n", encoding="utf-8")
+        (root / "chapters/1_intro.tex").write_text(
+            "正文具体可见图~\\ref{fig:missing}。\n"
+            "\\begin{figure}[htbp]\n"
+            "\\caption{年龄分布图}\n"
+            "\\label{fig:duplicate}\n"
+            "\\end{figure}\n"
+            "\\begin{figure}[htbp]\n"
+            "\\caption{年龄分布图副本}\n"
+            "\\label{fig:duplicate}\n"
+            "\\end{figure}\n",
+            encoding="utf-8",
+        )
+        (root / "Reference.bib").write_text("% empty\n", encoding="utf-8")
+        thesis_path = root / "workspace/intermediate/thesis.json"
+        thesis_path.write_text(
+            json.dumps(
+                {
+                    "counts": {"total_source_blocks": 1},
+                    "unsupported_features": [],
+                    "source_blocks": [
+                        {
+                            "id": "p0001",
+                            "status": "rendered",
+                            "text": "正文具体可见图2.1。",
+                            "target_slot": "chapters/1_intro.tex",
+                            "render_result": {
+                                "path": "chapters/1_intro.tex",
+                                "kind": "chapter_tex",
+                            },
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        result = check_flow_b_gate.check(root, thesis_path)
+        assert result["status"] == "blocked"
+        issues = {issue["check"]: issue for issue in result["issues"]}
+        assert issues["duplicate_latex_labels"]["labels"] == ["fig:duplicate"]
+        assert issues["undefined_latex_refs"]["labels"] == ["fig:missing"]
 
 
 def test_check_env_reports_missing_required_latex_packages():
@@ -706,7 +876,7 @@ def test_qa_flags_missing_superscript_rendering_and_resizebox():
         (root / "chapters").mkdir()
         (root / "workspace/intermediate").mkdir(parents=True)
         (root / "chapters/1_test.tex").write_text(
-            "\\resizebox{\\textwidth}{!}{bad table}\n引用1\n",
+            "\\resizebox{\\textwidth}{!}{bad table}\n引用1\n具体可见图2.1。\n",
             encoding="utf-8",
         )
         thesis = {
@@ -727,7 +897,32 @@ def test_qa_flags_missing_superscript_rendering_and_resizebox():
         )
         checks = {check["name"]: check for check in qa.source_quality_checks(root)}
         assert checks["source_table_resizebox_textwidth"]["status"] == "warning"
+        assert checks["source_manual_cross_reference_numbers"]["status"] == "failed"
+        assert "图2.1" in checks["source_manual_cross_reference_numbers"]["detail"]
+        assert checks["source_duplicate_latex_labels"]["status"] == "passed"
+        assert checks["source_undefined_latex_refs"]["status"] == "passed"
         assert checks["source_superscript_runs_rendered"]["status"] == "warning"
+
+
+def test_qa_flags_broken_latex_label_refs():
+    qa = load_module("qa")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "chapters").mkdir()
+        (root / "workspace/intermediate").mkdir(parents=True)
+        (root / "chapters/1_test.tex").write_text(
+            "正文见图~\\ref{fig:missing}。\n"
+            "\\caption{图一}\\label{fig:duplicate}\n"
+            "\\caption{图二}\\label{fig:duplicate}\n",
+            encoding="utf-8",
+        )
+        (root / "workspace/intermediate/thesis.json").write_text("{}", encoding="utf-8")
+
+        checks = {check["name"]: check for check in qa.source_quality_checks(root)}
+        assert checks["source_duplicate_latex_labels"]["status"] == "failed"
+        assert checks["source_duplicate_latex_labels"]["detail"] == "fig:duplicate"
+        assert checks["source_undefined_latex_refs"]["status"] == "failed"
+        assert checks["source_undefined_latex_refs"]["detail"] == "fig:missing"
 
 
 def test_qa_placeholder_scan_includes_generated_chapter_files():
@@ -796,6 +991,8 @@ if __name__ == "__main__":
     test_export_assets_does_not_mark_image_semantic_position_mapped()
     test_import_docx_reports_unsupported_features()
     test_flow_b_gate_blocks_unconfirmed_unsupported_features()
+    test_flow_b_gate_blocks_manual_figure_reference_numbers()
+    test_flow_b_gate_blocks_broken_latex_label_refs()
     test_check_env_reports_missing_required_latex_packages()
     test_check_env_python_docx_hint_uses_short_timeout_and_mirror_fallback()
     test_prescan_reads_cover_table_metadata_without_report_style_default()
@@ -806,6 +1003,7 @@ if __name__ == "__main__":
     test_render_basicinfo_requires_missing_english_content_decision()
     test_qa_flags_bibtex_and_citation_lint_failures()
     test_render_chapters_preserves_superscript_and_heading_levels()
+    test_render_chapters_outputs_labels_and_reference_rewrites()
     test_latex_escape_ascii_double_quotes_and_single_scan()
     test_render_chapters_blocks_prefix_path_escape()
     test_render_chapters_blocks_discarded_block_in_structure()
@@ -814,6 +1012,7 @@ if __name__ == "__main__":
     test_build_xelatex_uses_noninteractive_error_flags()
     test_render_chapters_table_uses_fixed_font_without_resizebox()
     test_qa_flags_missing_superscript_rendering_and_resizebox()
+    test_qa_flags_broken_latex_label_refs()
     test_qa_placeholder_scan_includes_generated_chapter_files()
     test_qa_requires_build_result_for_pdf_freshness()
     test_qa_counts_pages_with_pdfinfo_before_byte_fallback()

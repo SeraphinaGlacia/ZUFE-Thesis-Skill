@@ -48,6 +48,11 @@ BUILD_TEMP_FILES = [
 ]
 
 FINAL_BLOCK_STATES = {"rendered", "discarded_with_reason"}
+MANUAL_CROSS_REFERENCE_RE = re.compile(
+    r"(?<![\\A-Za-z])([图表])\s*[0-9０-９]+(?:\s*[.-]\s*[0-9０-９]+)+"
+)
+LATEX_LABEL_RE = re.compile(r"\\label\s*\{([^}]+)\}")
+LATEX_REF_RE = re.compile(r"\\(?:ref|autoref|pageref|eqref)\s*\{([^}]+)\}")
 
 
 def now_iso() -> str:
@@ -183,6 +188,82 @@ def overall_status(items: list[dict[str, Any]]) -> str:
     if "needs_confirmation" in statuses or "warning" in statuses:
         return "needs_confirmation"
     return "passed"
+
+
+def strip_latex_comment(line: str) -> str:
+    """移除单行 LaTeX 注释，保留转义百分号。
+
+    Args:
+        line (str): 单行 LaTeX 源码。
+
+    Returns:
+        str: 去掉非转义 ``%`` 之后的文本。
+    """
+    escaped = False
+    for index, char in enumerate(line):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == "%":
+            return line[:index]
+    return line
+
+
+def manual_cross_reference_hits(source_text: str, limit: int = 20) -> list[str]:
+    """查找正文源码中残留的手写图表编号。
+
+    这类 ``图2.1`` / ``表 1.2`` 字符串在重排后很容易与 LaTeX 自动编号不一致，
+    应由 Agent 确认后改写为 ``图~\\ref{...}`` 或 ``表~\\ref{...}``。
+
+    Args:
+        source_text (str): 章节 LaTeX 源码。
+        limit (int): 最多返回多少条命中摘要。
+
+    Returns:
+        list[str]: 带行号和短上下文的命中摘要。
+    """
+    hits = []
+    for line_number, raw_line in enumerate(source_text.splitlines(), start=1):
+        line = strip_latex_comment(raw_line)
+        for match in MANUAL_CROSS_REFERENCE_RE.finditer(line):
+            start = max(0, match.start() - 24)
+            end = min(len(line), match.end() + 24)
+            snippet = line[start:end].strip()
+            hits.append(f"line {line_number}: {snippet}")
+            if len(hits) >= limit:
+                return hits
+    return hits
+
+
+def latex_label_reference_issues(source_text: str) -> dict[str, list[str]]:
+    """检查章节源码中的 label/ref 闭环。
+
+    Args:
+        source_text (str): 章节 LaTeX 源码。
+
+    Returns:
+        dict[str, list[str]]: ``duplicate_labels`` 和 ``undefined_refs`` 列表。
+    """
+    labels = []
+    refs = []
+    for raw_line in source_text.splitlines():
+        line = strip_latex_comment(raw_line)
+        labels.extend(label.strip() for label in LATEX_LABEL_RE.findall(line) if label.strip())
+        refs.extend(ref.strip() for ref in LATEX_REF_RE.findall(line) if ref.strip())
+    seen = set()
+    duplicate_labels = []
+    for label in labels:
+        if label in seen and label not in duplicate_labels:
+            duplicate_labels.append(label)
+        seen.add(label)
+    undefined_refs = sorted(set(refs) - set(labels))
+    return {
+        "duplicate_labels": duplicate_labels,
+        "undefined_refs": undefined_refs,
+    }
 
 
 def command_exists(name: str) -> bool:
