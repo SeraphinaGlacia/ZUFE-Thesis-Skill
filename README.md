@@ -81,8 +81,8 @@
    npx skills add SeraphinaGlacia/ZUFE-Thesis-Skill
    ```
 
-   > [!WARNING]
-   > 本 Skill 需要与模板项目存在于同一个工作区，请务必保证在已有的模板项目库中安装本 Skill，否则其将无法正常工作。
+> [!WARNING]
+> 本 Skill 需要与模板项目存在于同一个工作区，请务必保证在已有的模板项目库中安装本 Skill，否则其将无法正常工作。
 
 4. 将 Word 同样存放于工作区中，准备好后，直接在对话中说明你的目标，例如：
 
