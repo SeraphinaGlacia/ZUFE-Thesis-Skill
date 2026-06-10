@@ -132,7 +132,7 @@ InitFile/schoolLogo.png
 - 样例图片
 - `InitFile/anonyLogo.png`
 
-缺少硬门禁文件时，不应通过安装 Python 包或 TeX 包修复。Agent 应提示用户当前目录不像 ZUFE-Thesis 模板根目录，要求用户切换到完整模板项目，或在用户批准后协助补齐模板文件。
+缺少硬门禁文件时，不应通过安装 Python 包或 TeX 包修复。Agent 应提示用户当前目录不像 ZUFE-Thesis 模板根目录，要求用户切换到完整模板项目，或在用户批准后协助补齐模板文件。模板获取优先使用 `https://github.com/sqsssq/ZUFE-Thesis`；如果 GitHub 因网络环境不可用，可改用国内备用链接 `https://gitee.com/cwf818/ZUFE-Thesis`；如果两个链接都不可用，应要求用户提供模板压缩包、已解压的完整模板目录，或其他可信获取方式。
 
 ### 字体与模板资源
 

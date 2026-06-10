@@ -70,7 +70,9 @@
 
 1. 先准备一个完整的 ZUFE-Thesis 模板项目。
 
-   原始模板仓库地址是 [sqsssq/ZUFE-Thesis](https://github.com/sqsssq/ZUFE-Thesis)。如果你还没有模板项目，可以把这个仓库地址交给 Agent，让它协助你下载或解压模板包，并确认打开的是模板根目录。
+   原始模板优先使用 GitHub 仓库：[sqsssq/ZUFE-Thesis](https://github.com/sqsssq/ZUFE-Thesis)。如果 GitHub 因网络环境不可用，可以改用国内备用链接：[Gitee - cwf818/ZUFE-Thesis](https://gitee.com/cwf818/ZUFE-Thesis)。
+
+   如果两个链接都无法使用，请让 Agent 暂停转换，并改为协助你使用手动下载的模板压缩包、已解压的完整模板目录，或其他可信来源。确认当前打开的是模板根目录之后，再继续安装和使用本 Skill。
 
 2. 在 Kimi Work / Codex 等工具中打开这个完整的 ZUFE-Thesis 模板项目。
 

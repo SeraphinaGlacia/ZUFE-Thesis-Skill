@@ -248,6 +248,17 @@ def test_check_template_requires_new_fonts_directory_layout():
         assert new_result["status"] == "passed"
 
 
+def test_check_template_guides_template_download_fallbacks():
+    check_template = load_module("check_template")
+    with tempfile.TemporaryDirectory() as tmp:
+        result = check_template.check_template(Path(tmp))
+        next_steps = "\n".join(result["next_steps"])
+        assert "https://github.com/sqsssq/ZUFE-Thesis" in next_steps
+        assert "https://gitee.com/cwf818/ZUFE-Thesis" in next_steps
+        assert "模板压缩包" in next_steps
+        assert "已解压的完整模板目录" in next_steps
+
+
 def test_latex_escape_ascii_double_quotes_and_single_scan():
     common = load_module("common")
     assert common.latex_escape('"产品差异化"') == "``产品差异化''"
@@ -987,6 +998,7 @@ def test_qa_counts_pages_with_pdfinfo_before_byte_fallback():
 if __name__ == "__main__":
     test_import_docx_preserves_superscript_runs()
     test_check_template_requires_new_fonts_directory_layout()
+    test_check_template_guides_template_download_fallbacks()
     test_import_docx_preserves_image_anchor_order()
     test_export_assets_does_not_mark_image_semantic_position_mapped()
     test_import_docx_reports_unsupported_features()

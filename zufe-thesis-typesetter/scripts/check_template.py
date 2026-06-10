@@ -41,7 +41,10 @@ def check_template(root: Path) -> dict:
             else "当前目录不像完整的 ZUFE-Thesis 模板根目录。"
         ),
         "next_steps": [] if status == "passed" else [
-            "请从下载后的 ZUFE-Thesis 模板根目录运行本 skill。",
+            "请从完整的 ZUFE-Thesis 模板根目录运行本 skill。",
+            "原始模板默认获取地址：https://github.com/sqsssq/ZUFE-Thesis",
+            "如果 GitHub 无法访问，可在用户确认后改用国内备用链接：https://gitee.com/cwf818/ZUFE-Thesis",
+            "如果两个链接都不可用，请要求用户提供模板压缩包、已解压的完整模板目录，或其他用户明确确认的可信获取方式；不要在空目录、本 Skill 仓库或缺失模板签名的目录中继续转换。",
             "继续前需要恢复或重新下载缺失的签名文件。",
         ],
     }

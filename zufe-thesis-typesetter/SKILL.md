@@ -19,7 +19,13 @@ description: 当用户需要使用 ZUFE-Thesis 模板处理 Word 论文或报告
 
 必须从 ZUFE-Thesis 模板根目录运行。修改任何文件前，先确认模板签名完整。
 
-如果用户尚未准备模板项目，先用自然语言说明本 Skill 依赖原始模板仓库 `https://github.com/sqsssq/ZUFE-Thesis`。Agent 可以在用户确认后协助下载、解压或切换到模板根目录，但不得在空目录、本 Skill 仓库或缺失模板签名的目录中继续转换。
+如果用户尚未准备模板项目，先说明本 Skill 依赖原始 ZUFE-Thesis LaTeX 模板，并按下面顺序处理：
+
+1. 默认引导用户使用原始模板 GitHub 仓库：`https://github.com/sqsssq/ZUFE-Thesis`。
+2. 如果 GitHub 因网络环境不可用，可在用户确认后改用国内备用链接：`https://gitee.com/cwf818/ZUFE-Thesis`。
+3. 如果 GitHub 和 Gitee 都不可用，停止转换，要求用户提供模板压缩包、已解压的完整模板目录，或其他可信获取方式。
+
+Agent 可以在用户确认后协助下载、解压或切换到模板根目录，但不得静默跳过模板准备，也不得在空目录、本 Skill 仓库或缺失模板签名的目录中继续转换。
 
 标准输入：
 
