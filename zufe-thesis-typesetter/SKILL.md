@@ -19,6 +19,8 @@ description: 当用户需要使用 ZUFE-Thesis 模板处理 Word 论文或报告
 
 必须从 ZUFE-Thesis 模板根目录运行。修改任何文件前，先确认模板签名完整。
 
+如果用户尚未准备模板项目，先用自然语言说明本 Skill 依赖原始模板仓库 `https://github.com/sqsssq/ZUFE-Thesis`。Agent 可以在用户确认后协助下载、解压或切换到模板根目录，但不得在空目录、本 Skill 仓库或缺失模板签名的目录中继续转换。
+
 标准输入：
 
 ```text

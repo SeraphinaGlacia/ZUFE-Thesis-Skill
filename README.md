@@ -68,23 +68,27 @@
 
 ## 那该如何使用呢？（快速开始）
 
-1. 先在 Kimi Work / Codex 等工具中打开一个完整的 ZUFE-Thesis 模板项目。
+1. 先准备一个完整的 ZUFE-Thesis 模板项目。
 
-  > [!WARNING]
-  > 本 Skill 需要与模板项目存在于同一个工作区，请务必保证在已有的模板项目库中安装本 Skill，否则其将无法正常工作。
+   原始模板仓库地址是 [sqsssq/ZUFE-Thesis](https://github.com/sqsssq/ZUFE-Thesis)。如果你还没有模板项目，可以把这个仓库地址交给 Agent，让它协助你下载或解压模板包，并确认打开的是模板根目录。
 
-2. 然后，在目标工作区安装本 Skill：
+2. 在 Kimi Work / Codex 等工具中打开这个完整的 ZUFE-Thesis 模板项目。
 
-  ```bash
-  # 推荐使用 npx skills add 命令
-  npx skills add SeraphinaGlacia/ZUFE-Thesis-Skill
-  ```
+3. 然后，在目标工作区安装本 Skill：
 
-3. 将 Word 同样存放于工作区中，准备好后，直接在对话中说明你的目标，例如：
+   ```bash
+   # 推荐使用 npx skills add 命令
+   npx skills add SeraphinaGlacia/ZUFE-Thesis-Skill
+   ```
 
-  ```text
-  请帮我把 XXX.docx 转换为 LaTeX 工程和 PDF。
-  ```
+   > [!WARNING]
+   > 本 Skill 需要与模板项目存在于同一个工作区，请务必保证在已有的模板项目库中安装本 Skill，否则其将无法正常工作。
+
+4. 将 Word 同样存放于工作区中，准备好后，直接在对话中说明你的目标，例如：
+
+   ```text
+   请帮我把 XXX.docx 转换为 LaTeX 工程和 PDF。
+   ```
 
 通常而言，你不需要有任何 LaTeX 基础和环境配置基础，只要把 Word 文档交给 Agent 处理就可以了。你不需要过分担心会出现你无法处理的问题，Agent 会尽力帮你自动解决。
 

@@ -32,6 +32,14 @@
 
 不要把 `main.pdf`、`README.md`、`docs/`、`paperCode/`、样例章节或样例图片作为门禁。第一版不把 `InitFile/anonyLogo.png` 作为硬门禁。
 
+如果模板签名不完整，先说明本 Skill 依赖原始模板仓库：
+
+```text
+https://github.com/sqsssq/ZUFE-Thesis
+```
+
+用户尚未准备模板项目时，Agent 可以在用户批准后协助下载、解压或定位模板根目录。不要把这个步骤写成静默自动下载；也不要在空目录、本 Skill 仓库或缺失模板签名的目录中继续转换。
+
 ## 工作区
 
 用户批准后创建：
