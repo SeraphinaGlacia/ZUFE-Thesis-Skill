@@ -36,9 +36,9 @@
 
   <g class="system" text-anchor="middle">
     <text x="540" y="116" font-size="23" font-weight="600" fill="#6b7280" letter-spacing="3">ZUFE-Thesis-Skill</text>
-    <text x="540" y="248" font-size="62" font-weight="700" fill="#111827" letter-spacing="0">让 LaTeX 的好处先发生</text>
+    <text x="540" y="248" font-size="62" font-weight="700" fill="#111827" letter-spacing="0">Word 写完，格式交给 AI</text>
     <text x="540" y="324" font-size="28" font-weight="400" fill="#4b5563">从 Word 初稿自动生成规范格式的 PDF</text>
-    <text x="540" y="366" font-size="28" font-weight="400" fill="#4b5563">不把时间浪费在反复调格式上</text>
+    <text x="540" y="366" font-size="28" font-weight="400" fill="#4b5563">不把时间浪费在反复调整格式上</text>
   </g>
 
   <g transform="translate(82 436) rotate(-2.2 220 310)" filter="url(#softShadow)">
@@ -48,7 +48,7 @@
 
   <g class="system" text-anchor="middle">
     <text x="302" y="1110" font-size="24" font-weight="650" fill="#111827">Word 初稿</text>
-    <text x="302" y="1146" font-size="18" fill="#6b7280">拥有大量格式错误</text>
+    <text x="302" y="1146" font-size="18" fill="#6b7280">格式混乱，调整繁琐</text>
   </g>
 
   <g transform="translate(558 434) rotate(1.8 220 312)" filter="url(#softShadow)">
@@ -75,5 +75,6 @@
 
   <g class="system" text-anchor="middle">
     <text x="540" y="1370" font-size="18" fill="#9ca3af">github.com/SeraphinaGlacia/ZUFE-Thesis-Skill</text>
+    <text x="540" y="1404" font-size="16" fill="#9ca3af">Made with ❤️ by SeraphinaGlacia / Xinlei Zhou</text>
   </g>
 </svg>
