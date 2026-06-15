@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import base64
+import contextlib
+import io
 import importlib.util
 import json
 import subprocess
@@ -535,6 +537,10 @@ def test_check_env_reports_missing_required_latex_packages():
     assert checks["tex_package_biblatex.sty"]["status"] == "passed"
     assert checks["tex_package_gb7714-2015.bbx"]["status"] == "blocked"
     assert result["status"] == "blocked"
+    issues = {issue["code"]: issue for issue in result["issues"]}
+    assert issues["tex_core_file_missing"]["severity"] == "blocking"
+    assert issues["tex_core_file_missing"]["repair_policy"] == "ask_user_before_install"
+    assert issues["tex_core_file_missing"]["verify_command"].endswith("--stage latex")
 
 
 def test_check_env_python_docx_hint_uses_short_timeout_and_mirror_fallback():
@@ -553,6 +559,65 @@ def test_check_env_python_docx_hint_uses_short_timeout_and_mirror_fallback():
     assert "--timeout 8" in hint
     assert "pypi.tuna.tsinghua.edu.cn/simple" in hint
     assert "失败、超时或无响应" in hint
+    issues = {issue["code"]: issue for issue in result["issues"]}
+    assert issues["python_docx_missing"]["severity"] == "blocking"
+    assert issues["python_docx_missing"]["layer"] == "python-package"
+    assert issues["python_docx_missing"]["verify_command"].endswith("--stage minimal")
+
+
+def test_check_env_reports_missing_latex_commands_as_structured_issues():
+    check_env = load_module("check_env")
+    original_command_exists = check_env.command_exists
+    original_kpsewhich_exists = getattr(check_env, "kpsewhich_exists", None)
+    try:
+        check_env.command_exists = lambda name: name not in {"xelatex", "biber"}
+        check_env.kpsewhich_exists = lambda _filename: True
+        result = check_env.check("latex")
+    finally:
+        check_env.command_exists = original_command_exists
+        if original_kpsewhich_exists is not None:
+            check_env.kpsewhich_exists = original_kpsewhich_exists
+
+    issues = result["issues"]
+    assert result["status"] == "blocked"
+    assert [issue["code"] for issue in issues] == [
+        "tex_command_missing",
+        "tex_command_missing",
+    ]
+    assert {issue["target"] for issue in issues} == {"xelatex", "biber"}
+    assert all(issue["verify_command"].endswith("--stage latex") for issue in issues)
+
+
+def test_check_env_qa_stage_reports_optional_tools_without_blocking():
+    check_env = load_module("check_env")
+    original_command_exists = check_env.command_exists
+    try:
+        check_env.command_exists = lambda _name: False
+        result = check_env.check("qa")
+    finally:
+        check_env.command_exists = original_command_exists
+
+    checks = {check["name"]: check for check in result["checks"]}
+    assert checks["pdfinfo"]["status"] == "needs_review"
+    assert checks["pdftotext"]["status"] == "needs_review"
+    assert result["status"] == "needs_review"
+    assert {issue["code"] for issue in result["issues"]} == {"qa_tool_missing"}
+    assert all(issue["severity"] == "optional" for issue in result["issues"])
+
+
+def test_check_env_main_allows_needs_review_exit_code():
+    check_env = load_module("check_env")
+    original_check = check_env.check
+    try:
+        check_env.check = lambda _stage: {
+            "status": "needs_review",
+            "checks": [],
+            "issues": [],
+        }
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert check_env.main() == 0
+    finally:
+        check_env.check = original_check
 
 
 def test_prescan_reads_cover_table_metadata_without_report_style_default():
@@ -1007,6 +1072,9 @@ if __name__ == "__main__":
     test_flow_b_gate_blocks_broken_latex_label_refs()
     test_check_env_reports_missing_required_latex_packages()
     test_check_env_python_docx_hint_uses_short_timeout_and_mirror_fallback()
+    test_check_env_reports_missing_latex_commands_as_structured_issues()
+    test_check_env_qa_stage_reports_optional_tools_without_blocking()
+    test_check_env_main_allows_needs_review_exit_code()
     test_prescan_reads_cover_table_metadata_without_report_style_default()
     test_render_basicinfo_blocks_missing_report_style()
     test_render_basicinfo_blocks_missing_required_cover_metadata()

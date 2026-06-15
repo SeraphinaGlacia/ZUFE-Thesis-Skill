@@ -8,11 +8,13 @@
 
 1. 模板签名检查：确认当前目录像 ZUFE-Thesis 模板根目录。
 2. 工作区与 Word 整理：创建标准 `workspace/`，把用户在对话中提供或 @ 的 Word 整理到固定路径。
-3. 最小 Python 提取环境检查：先确保能读取 DOCX。
+3. 最小 Python 提取环境检查：按 `environment-sop.md` 运行 `check_env.py --stage minimal`，先确保能读取 DOCX。
 4. Word 轻量预扫描：读取全文结构，用于判断 Word 是否可读、是否像论文、能否生成元数据候选。
 5. `metadata.yaml` 确认/补齐：展示候选表，让用户确认或修改封面身份信息。
 6. 输出目录保护：检查旧输出，避免覆盖。
-7. LaTeX/Biber 环境检查：确认后续生成和编译链可用。
+7. LaTeX/Biber 环境检查：按 `environment-sop.md` 运行 `check_env.py --stage latex`，确认后续生成和编译链可用。
+
+环境判断先读 `zufe-thesis-typesetter/references/environment-sop.md`。只有需要平台命令、安装细节、PATH 修复或 TeX 包补装时，才读取 `environment-setup-and-repair.md`。
 
 ## A.2 模板签名检查
 

@@ -59,7 +59,7 @@ flowchart TD
         diagnoseBuild --> failureType{"失败分类"}
         failureType -- "mechanical_fixable" --> mechanicalRepair["Agent 有限机械修复"]
         mechanicalRepair --> buildPy
-        failureType -- "environment_issue" --> env["读取 environment-setup-and-repair.md"]
+        failureType -- "environment_issue" --> env["先读取 environment-sop.md"]
         env --> envRepair["用户批准后修复环境"]
         envRepair --> buildPy
         failureType -- "return_to_flow_b" --> refB
@@ -151,7 +151,8 @@ flowchart LR
 | references | 读取时机 | 主要内容 |
 | --- | --- | --- |
 | `flow-a-gatekeeping.md` | 做流程 A 前 | 当前目录是不是模板根目录，输入和环境是否足以进入转换 |
-| `environment-setup-and-repair.md` | 依赖缺失、环境安装、编译环境修复时 | 缺什么、能否自动修、需要用户批准什么 |
+| `environment-sop.md` | 做环境判断或环境修复前 | 按 profile 和 issue code 判断下一步 |
+| `environment-setup-and-repair.md` | 需要平台命令、安装细节、PATH 修复或 TeX 包补装时 | 具体命令、成本和安全边界 |
 | `flow-b-conversion.md` | 正式抽取、语义映射、渲染前 | 如何做到无静默丢失、无静默错放 |
 | `thesis-json-schema.md` | 手动编辑或判断 `thesis.json` 时 | 源块、状态、确认、渲染记录应该怎么写 |
 | `flow-c-export-and-qa.md` | 编译、诊断、QA 前 | 如何生成新 PDF，如何分类失败，如何判断交付状态 |
@@ -171,7 +172,7 @@ flowchart LR
 | 3 | `check_env.py --stage minimal` | 确认 Python 和 `python-docx` 能支持 DOCX 预扫描 |
 | 4 | `prescan_docx.py` | 轻量读取 Word，生成 metadata 候选，不生成正式 `thesis.json` |
 | 5 | Agent 确认 metadata | 向用户确认 `report_style`、题目、学院、专业、导师等封面字段 |
-| 6 | `check_env.py --stage latex` 或 `--stage all` | 确认 `xelatex`、`biber` 和关键 TeX 包可用 |
+| 6 | `check_env.py --stage latex` | 确认 `xelatex`、`biber` 和关键 TeX 包可用 |
 
 流程 A 的输出是标准输入和可继续执行的环境：`workspace/input/thesis.docx`、`workspace/input/metadata.yaml`、安全的旧产物状态，以及足够进入流程 B/C 的依赖条件。
 
@@ -208,7 +209,7 @@ flowchart LR
 | `common.py` | shared | 提供 JSON、路径、归档、LaTeX 转义等共享工具 |
 | `check_template.py` | A | 验证模板签名，避免在错误目录写入 |
 | `prepare_workspace.py` | A | 创建标准 workspace，整理输入和旧输出 |
-| `check_env.py` | A/C | 检查 Python DOCX 环境、LaTeX/Biber 和关键包 |
+| `check_env.py` | A/C | 检查 Python DOCX 环境、LaTeX/Biber、QA 工具和关键包，并输出环境 issue code |
 | `prescan_docx.py` | A | 轻量预扫描 Word，提取 metadata 候选 |
 | `import_docx.py` | B | 正式抽取源块、run 级证据和 unsupported features |
 | `export_assets.py` | B | 导出 DOCX 媒体资源，并回写资源证据 |
@@ -237,7 +238,7 @@ flowchart LR
 
 - 流程 A 失败：停止在输入、模板或环境门禁，不进入正式抽取。
 - 流程 B 失败：停止在语义确认或模板写入，不进入编译。
-- 流程 C 失败：先分类；机械问题可有限修复，语义问题必须回到流程 B，环境问题必须读取环境修复的 reference 并获得用户批准。
+- 流程 C 失败：先分类；机械问题可有限修复，语义问题必须回到流程 B，环境问题必须先读取 `environment-sop.md`，需要具体平台修复时再读取环境修复 reference，并获得用户批准。
 - QA 给出 `needs_review`：PDF 可以存在，但不能证明完全没有错误；必须把风险说明给用户。
 
 这也是为什么 `report.md`、`qa_report.md` 和 JSON 结果很重要：它们让 Agent 能把内部失败状态翻译成用户能理解的下一步，而不是只把 LaTeX 日志或 Python 报错呈现出来。

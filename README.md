@@ -143,6 +143,7 @@ zufe-thesis-typesetter/
 │   └── metadata.example.yaml           # 元数据示例
 ├── references/
 │   ├── environment-setup-and-repair.md # 环境修复
+│   ├── environment-sop.md              # 环境检测 SOP
 │   ├── flow-a-gatekeeping.md           # 流程 A Workflow
 │   ├── flow-b-conversion.md            # 流程 B Workflow
 │   ├── flow-c-export-and-qa.md         # 流程 C Workflow

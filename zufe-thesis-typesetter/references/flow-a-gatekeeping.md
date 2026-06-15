@@ -6,11 +6,13 @@
 
 1. 检查模板签名。
 2. 创建或确认 `workspace/`，把 Word 文件放到 `workspace/input/thesis.docx`。
-3. 检查最小 Python DOCX 抽取环境。
+3. 按 `environment-sop.md` 运行 `check_env.py --stage minimal`，检查最小 Python DOCX 抽取环境。
 4. 轻量预扫描 Word。
 5. 确认或补齐 `workspace/input/metadata.yaml`。
 6. 保护旧 `workspace/intermediate/` 和 `workspace/output/` 产物。
-7. 检查 `xelatex`、`biber` 和模板关键 TeX 包。
+7. 按 `environment-sop.md` 运行 `check_env.py --stage latex`，检查 `xelatex`、`biber` 和模板关键 TeX 包。
+
+环境判断先读 `environment-sop.md`。只有需要平台命令、安装细节、PATH 修复或 TeX 包补装时，才读取 `environment-setup-and-repair.md`。
 
 ## 模板签名
 
