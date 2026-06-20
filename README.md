@@ -5,9 +5,9 @@
 <h1 align="center">ZUFE-Thesis-Skill</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Thesis-ZUFE-2ea043" alt="Thesis: ZUFE">
-  <img src="https://img.shields.io/github/v/release/SeraphinaGlacia/ZUFE-Thesis-Skill?label=version" alt="Version">
-  <img src="https://img.shields.io/badge/license-AGPL--3.0-6b7280" alt="License: AGPL-3.0">
+  <img src="https://img.shields.io/badge/Thesis-ZUFE-8ecae6" alt="Thesis: ZUFE">
+  <img src="https://img.shields.io/github/v/release/SeraphinaGlacia/ZUFE-Thesis-Skill?label=version&color=facc15" alt="Version">
+  <img src="https://img.shields.io/badge/license-AGPL--3.0-8b5cf6" alt="License: AGPL-3.0">
 </p>
 
 <div align="center">
