@@ -1,16 +1,16 @@
 # ZUFE Thesis Skill 工作流设计
 
-本文档保留开发期用户侧 A/B/C 工作流总览。当前可执行 Skill 的运行时约束以 `zufe-thesis-typesetter/SKILL.md` 和 `zufe-thesis-typesetter/references/` 为准；`docs/development/workflows/` 用于记录设计演进和维护背景。
+本文档保留开发期用户侧 A/B/C 工作流总览。当前可执行 Skill 的运行时约束以 `zufe-thesis-typesetter/SKILL.md` 和 `zufe-thesis-typesetter/references/` 为准；`docs/archive/early-workflows/` 用于记录早期设计演进和维护背景。
 
-如果需要理解 Skill 包内部如何调动 `SKILL.md`、`references/`、`scripts/` 和 `tests/`，先读 `docs/development/skill-internal-workflow.md`。
+如果需要理解 Skill 包内部如何调动 `SKILL.md`、`references/`、`scripts/` 和 `tests/`，先读 `docs/design/internal-execution.md`。
 
 ## 总览
 
-| 流程 | 名称 | 目标 | 详细文档 | 当前状态 |
+| 流程 | 名称 | 目标 | 早期设计记录 | 记录状态 |
 | --- | --- | --- | --- | --- |
-| A | 环境与输入确认 | 严格门禁与智能预准备，确保能安全进入转换 | `docs/development/workflows/flow-a-gatekeeping.md` | 已确认第一版 |
-| B | 转换与模糊确认 | 正式抽取 Word 内容，识别结构，处理低置信度内容 | `docs/development/workflows/flow-b-conversion.md` | 严谨性门槛已确认，细节继续细化 |
-| C | 编译、质检与导出 | 生成 LaTeX 工程和 PDF，诊断错误并交付结果 | `docs/development/workflows/flow-c-export-and-qa.md` | 已确认第一版 |
+| A | 环境与输入确认 | 严格门禁与智能预准备，确保能安全进入转换 | `docs/archive/early-workflows/flow-a-gatekeeping.md` | 已确认第一版 |
+| B | 转换与模糊确认 | 正式抽取 Word 内容，识别结构，处理低置信度内容 | `docs/archive/early-workflows/flow-b-conversion.md` | 严谨性门槛已确认，细节继续细化 |
+| C | 编译、质检与导出 | 生成 LaTeX 工程和 PDF，诊断错误并交付结果 | `docs/archive/early-workflows/flow-c-export-and-qa.md` | 已确认第一版 |
 
 ## 流程关系
 
