@@ -55,7 +55,7 @@ workspace/output/qa_report.md
 
 1. **流程 A**：检查模板、workspace、DOCX、metadata、旧输出、Python DOCX 环境、LaTeX/Biber 环境。
 2. **流程 B**：把 Word 每个可见或可抽取内容块写入 `thesis.json`；Agent 负责分配语义槽位并向用户确认低置信度内容；脚本只渲染已确认映射。
-3. **流程 C**：归档旧编译产物，运行 `xelatex -> biber -> xelatex -> xelatex`，诊断失败，做有限机械修复，并质检新 PDF。
+3. **流程 C**：再次确认流程 B 门禁和输入指纹，归档旧编译产物，运行 `xelatex -> biber -> xelatex -> xelatex`，诊断失败，做有限机械修复，并质检新 PDF。
 
 ## 脚本使用
 
@@ -63,17 +63,17 @@ workspace/output/qa_report.md
 
 - `scripts/check_template.py`：检查 ZUFE-Thesis 模板签名。
 - `scripts/prepare_workspace.py`：创建 `workspace/`，把 DOCX 放到标准路径，并可在用户批准后归档旧输出。
-- `scripts/check_env.py`：检查 Python、`python-docx`、`xelatex`、`biber` 和模板关键 TeX 包。
+- `scripts/check_env.py`：按 profile 检查 Python、`python-docx`、`xelatex`、`biber`、模板关键 TeX 包和 QA 工具；它不替代模板签名或 DOCX 可读性检查。
 - `scripts/prescan_docx.py`：流程 A 的 DOCX 轻量预扫描和 metadata 候选提取。不得生成正式 `thesis.json`。
 - `scripts/import_docx.py`：流程 B 正式抽取，生成 `thesis.json` 和 `extracted.md`。
-- `scripts/export_assets.py`：抽取 DOCX 媒体到 `Images/word_media/` 并记录证据。
+- `scripts/export_assets.py`：核对源 DOCX 指纹后，抽取媒体到 `Images/word_media/` 并记录证据。
 - `scripts/render_basicinfo.py`：把 metadata、摘要和关键词写入 `chapters/basicinfo.tex`。
-- `scripts/render_chapters.py`：把已确认章节映射写入 `chapters/*.tex` 和 `chapters/mainbody.tex`。
-- `scripts/render_bib.py`：把已确认 BibTeX 写入 `Reference.bib`，不得编造参考文献。
+- `scripts/render_chapters.py`：在拒绝重复章节目标和无效图片资源后，把已确认章节映射写入 `chapters/*.tex` 和 `chapters/mainbody.tex`。
+- `scripts/render_bib.py`：只有所有参考文献项均已确认时才原子写入 `Reference.bib`，不得编造或部分覆盖参考文献。
 - `scripts/check_flow_b_gate.py`：若仍有未处理、未确认或未渲染源块，则阻止流程 B 完成。
-- `scripts/build.py`：归档旧 `main.pdf`，清理临时编译文件，运行固定编译链。
+- `scripts/build.py`：强制重跑流程 B 门禁，通过后才归档旧 `main.pdf`、清理临时文件并运行固定编译链。
 - `scripts/diagnose_build.py`：把构建失败分类为可行动问题。
-- `scripts/qa.py`：检查 PDF 新鲜度、文本、关键信号、未解析引用、BibTeX/引用闭环、模板残留和占位符。
+- `scripts/qa.py`：核对构建所用账本与当前输入，再检查固定编译链、PDF 新鲜度、文本、关键信号、引用、模板残留和占位符；通过后仍须人工视觉检查。
 
 ## Agent 职责
 
@@ -95,9 +95,10 @@ Agent 负责语义判断，脚本不得替代：
 - 普通正文中的 ASCII 双引号必须转换为 LaTeX 左右引号 ``...''；中文智能引号默认保留。不得对 raw LaTeX、图片路径、引用命令和公式套用正文引号转换。
 - 缺失英文摘要或英文关键词时，必须让用户选择：确认留空、手动提供或允许生成；不得默认留空或自动根据中文补写。若用户允许生成，必须先说明这是内容性补写，并在 metadata 中记录授权。
 - 生成 `chapters/basicinfo.tex` 时必须写入全局 `\hypersetup{hidelinks,pdfborder={0 0 0},pdfborderstyle={/S/U/W 0}}`，避免图表引用和 URL 在 PDF 中显示彩色链接边框。
+- 映射到 `chapters/basicinfo.tex` 的源块必须声明 `metadata_fields`，且脚本必须核对整个源块都有去向；不能被宏承接的文字须改映射，或用 `metadata_excluded_text` 和 `metadata_exclusion_reason` 显式记录。
 - 表格默认使用模板风格字号 `\zihao{5}`。不得无条件使用 `\resizebox{\textwidth}{!}{...}`，因为它会把较窄表格放大并破坏字号。
 - 只有表格自然宽度确实超过版心且没有更稳妥的列宽方案时，才允许缩小表格；禁止为了“填满版心”放大表格。
-- 脚注、尾注、公式、超链接、批注、修订痕迹、文本框、页眉页脚等暂不自动转换内容必须进入 `unsupported_features`，不得静默忽略。
+- 脚注、尾注、公式、超链接、批注、修订痕迹、文本框、内容控件、外部导入内容、链接图片、Word 域/自动编号、图表/SmartArt、OLE 对象和页眉页脚等暂不自动转换内容必须进入 `unsupported_features`，不得静默忽略。
 
 ## 详细参考
 

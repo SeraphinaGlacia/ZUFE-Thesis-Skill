@@ -6,6 +6,8 @@
 
 ## 编译前处理
 
+`build.py` 必须先重跑流程 B 完成门禁。门禁未通过时不得归档旧 PDF 或启动编译；通过时，`build_result.json` 必须记录当前 `thesis.json` 和源 DOCX 指纹。`qa.py` 会重跑门禁并核对这些指纹，防止构建后替换 Word 或修改账本却沿用旧 PDF。
+
 编译前归档旧 `main.pdf`：
 
 ```text
@@ -61,20 +63,23 @@ xelatex -interaction=nonstopmode -halt-on-error -file-line-error main.tex
 第一版只检查日志、文本和页级证据，不做 PDF 截图视觉检查：
 
 - 本轮生成新的 `main.pdf`。
-- PDF 页数大于 0。
+- `build_result.json` 记录固定四步编译链全部成功，且 `workspace/output/report.md` 存在。
+- PDF 页数大于 0；若 PDF 存在但缺少 `pdfinfo` 且字节兜底无法可靠计数，只能降级为 `needs_review`，不能误报为零页失败。
 - PDF 文本可读取。
 - 日志无严重编译错误。
 - 没有未解析引用或问号引用。
 - `Reference.bib` 没有重复 key 或明显大括号不平衡，正文 `\cite{...}` key 都能在 `Reference.bib` 中找到。
 - 参考文献信号存在。
 - 目录、摘要、正文和参考文献信号存在。
+- 如果用户已明确记录 `english_content_decision=omit`，缺少英文摘要信号不构成失败；否则仍按关键部分检查。
 - 若 `thesis.json` 记录了上标 run，章节源码中应存在对应 `\textsuperscript{...}` 渲染信号。
 - 章节源码中不得出现无条件 `\resizebox{\textwidth}{!}` 表格缩放风险；出现时最终状态至少应为 `needs_review`。
 - 所有生成章节源码和 PDF 文本中没有模板蓝字说明或明显占位符，例如 `xx`、`xxxxxxxxxxxx`、`本文……`、`20xx`、`xxx`。
+- 源码级检查只读取当前章节结构或 `chapters/mainbody.tex` 实际引用的文件，不扫描本轮未使用的历史 `.tex` 文件。
 - `workspace/output/report.md` 和 `workspace/output/qa_report.md` 存在。
 
-最终状态：
+任何自动状态都不能直接替代人工提交确认。最终状态：
 
-- `ready_to_submit`：PDF 已生成且 QA 通过。
+- `ready_for_manual_review`：所有自动检查通过，可以进入人工视觉检查，但尚不能宣称可直接提交。
 - `needs_review`：PDF 已生成，但存在非阻断风险。
 - `failed`：没有新 PDF、编译失败、关键部分缺失、引用/资源严重错误，或需要退回流程 B。

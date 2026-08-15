@@ -40,7 +40,9 @@ def check_template(root: Path) -> dict:
             if status == "passed"
             else "当前目录不像完整的 ZUFE-Thesis 模板根目录。"
         ),
-        "next_steps": [] if status == "passed" else [
+        "next_steps": []
+        if status == "passed"
+        else [
             "请从完整的 ZUFE-Thesis 模板根目录运行本 skill。",
             "原始模板默认获取地址：https://github.com/sqsssq/ZUFE-Thesis",
             "如果 GitHub 无法访问，可在用户确认后改用国内备用链接：https://gitee.com/cwf818/ZUFE-Thesis",

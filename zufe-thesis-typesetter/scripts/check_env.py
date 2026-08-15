@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import importlib.util
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -22,10 +24,12 @@ QA_TOOLS = {
     "pdftotext": "用于抽取 PDF 文本；缺失时无法完成文本级 QA。",
 }
 
+MINIMUM_PYTHON = (3, 10)
+PYTHON_COMMAND = shlex.quote(sys.executable)
 PYTHON_DOCX_INSTALL_HINT = (
-    "先短超时尝试：python -m pip install --timeout 8 --retries 1 python-docx；"
+    f"先短超时尝试：{PYTHON_COMMAND} -m pip install --timeout 8 --retries 1 python-docx；"
     "若失败、超时或无响应，改用中国大陆镜像："
-    "python -m pip install --timeout 15 --retries 2 "
+    f"{PYTHON_COMMAND} -m pip install --timeout 15 --retries 2 "
     "-i https://pypi.tuna.tsinghua.edu.cn/simple python-docx"
 )
 
@@ -61,7 +65,7 @@ def issue(
         "repair_policy": repair_policy,
         "next_action": next_action,
         "verify_command": (
-            "python zufe-thesis-typesetter/scripts/check_env.py "
+            f"{PYTHON_COMMAND} zufe-thesis-typesetter/scripts/check_env.py "
             f"--root . --stage {verify_stage}"
         ),
     }
@@ -83,8 +87,45 @@ def kpsewhich_exists(filename: str) -> bool:
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
+        timeout=8,
     )
     return process.returncode == 0 and bool(process.stdout.strip())
+
+
+def pip_available() -> bool:
+    """检查当前 Python 解释器是否能调用 pip。
+
+    Returns:
+        bool: ``python -m pip --version`` 成功时返回 True。
+    """
+    try:
+        process = subprocess.run(
+            [sys.executable, "-m", "pip", "--version"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=8,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return process.returncode == 0
+
+
+def python_docx_import_error() -> str | None:
+    """验证 python-docx 不仅可发现，而且能够实际导入。
+
+    Returns:
+        str | None: 导入成功时为 None，否则为简短错误信息。
+    """
+    if importlib.util.find_spec("docx") is None:
+        return "not_installed"
+    try:
+        docx_module = importlib.import_module("docx")
+    except Exception as exc:
+        return f"{type(exc).__name__}: {exc}"
+    if not callable(getattr(docx_module, "Document", None)):
+        return "docx module does not expose the python-docx Document API"
+    return None
 
 
 def check(stage: str) -> dict:
@@ -96,21 +137,51 @@ def check(stage: str) -> dict:
     Returns:
         dict: 流程 A 环境检查结果，包含每个依赖项的状态和修复提示。
     """
-    checks = [item("python", "passed", f"Python 可运行：{sys.executable}")]
+    python_supported = sys.version_info >= MINIMUM_PYTHON
+    version_text = ".".join(str(part) for part in sys.version_info[:3])
+    checks = [
+        item(
+            "python",
+            "passed" if python_supported else "blocked",
+            (
+                f"Python {version_text} 可运行：{sys.executable}"
+                if python_supported
+                else f"Python {version_text} 低于最低要求 3.10。"
+            ),
+        )
+    ]
     issues = []
+    if not python_supported:
+        issues.append(
+            issue(
+                "python_version_unsupported",
+                version_text,
+                "python-runtime",
+                "blocking",
+                "ask_user_before_install",
+                "install_supported_python",
+                stage,
+            )
+        )
     if stage in {"minimal", "all"}:
-        if importlib.util.find_spec("docx") is None:
+        docx_error = python_docx_import_error()
+        if docx_error:
+            missing = docx_error == "not_installed"
             checks.append(
                 item(
                     "python-docx",
                     "blocked",
-                    "缺少 python-docx，无法预扫描和抽取 DOCX。",
+                    (
+                        "缺少 python-docx，无法预扫描和抽取 DOCX。"
+                        if missing
+                        else f"python-docx 已安装但导入失败：{docx_error}"
+                    ),
                     install_hint=PYTHON_DOCX_INSTALL_HINT,
                 )
             )
             issues.append(
                 issue(
-                    "python_docx_missing",
+                    "python_docx_missing" if missing else "python_docx_import_failed",
                     "python-docx",
                     "python-package",
                     "blocking",
@@ -119,6 +190,27 @@ def check(stage: str) -> dict:
                     "minimal",
                 )
             )
+            if pip_available():
+                checks.append(item("pip", "passed", "当前 Python 可以调用 pip。"))
+            else:
+                checks.append(
+                    item(
+                        "pip",
+                        "blocked",
+                        "当前 Python 无法调用 pip，不能按建议安装 python-docx。",
+                    )
+                )
+                issues.append(
+                    issue(
+                        "pip_unavailable",
+                        "pip",
+                        "python-package-manager",
+                        "blocking",
+                        "ask_user_before_install",
+                        "repair_python_pip",
+                        "minimal",
+                    )
+                )
         else:
             checks.append(item("python-docx", "passed", "python-docx 可导入。"))
     if stage in {"latex", "all"}:
@@ -145,35 +237,61 @@ def check(stage: str) -> dict:
                         "latex",
                     )
                 )
-        for filename, detail in REQUIRED_TEX_FILES.items():
-            if kpsewhich_exists(filename):
-                checks.append(
-                    item(
-                        f"tex_package_{filename}",
-                        "passed",
-                        f"{filename} 可由 kpsewhich 找到。",
-                    )
+        if not command_exists("kpsewhich"):
+            checks.append(
+                item(
+                    "kpsewhich",
+                    "blocked",
+                    "缺少 kpsewhich，无法判断模板核心 TeX 文件是否可用。",
+                    install_hint="获得用户批准后修复 TeX 发行版或 PATH。",
                 )
-            else:
-                checks.append(
-                    item(
-                        f"tex_package_{filename}",
-                        "blocked",
-                        f"缺少 {filename}：{detail}",
-                        install_hint="获得用户批准后使用 tlmgr 安装对应 TeX Live 包。",
-                    )
+            )
+            issues.append(
+                issue(
+                    "tex_command_missing",
+                    "kpsewhich",
+                    "tex-command",
+                    "blocking",
+                    "ask_user_before_install",
+                    "install_or_repair_tex_distribution",
+                    "latex",
                 )
-                issues.append(
-                    issue(
-                        "tex_core_file_missing",
-                        filename,
-                        "tex-package",
-                        "blocking",
-                        "ask_user_before_install",
-                        "install_tex_package",
-                        "latex",
+            )
+        else:
+            checks.append(item("kpsewhich", "passed", "kpsewhich 在 PATH 中。"))
+            for filename, detail in REQUIRED_TEX_FILES.items():
+                try:
+                    available = kpsewhich_exists(filename)
+                except (OSError, subprocess.TimeoutExpired):
+                    available = False
+                if available:
+                    checks.append(
+                        item(
+                            f"tex_package_{filename}",
+                            "passed",
+                            f"{filename} 可由 kpsewhich 找到。",
+                        )
                     )
-                )
+                else:
+                    checks.append(
+                        item(
+                            f"tex_package_{filename}",
+                            "blocked",
+                            f"缺少 {filename}：{detail}",
+                            install_hint="获得用户批准后使用 tlmgr 安装对应 TeX Live 包。",
+                        )
+                    )
+                    issues.append(
+                        issue(
+                            "tex_core_file_missing",
+                            filename,
+                            "tex-package",
+                            "blocking",
+                            "ask_user_before_install",
+                            "install_tex_package",
+                            "latex",
+                        )
+                    )
     if stage in {"qa", "all"}:
         for command, detail in QA_TOOLS.items():
             if command_exists(command):
@@ -204,18 +322,46 @@ def check(stage: str) -> dict:
     return {
         "flow": "A",
         "gate": f"environment_{stage}",
+        "profile": stage,
         "status": status,
+        "scope": {
+            "checked": {
+                "minimal": ["python_version", "python_docx_import"],
+                "latex": ["python_version", "xelatex", "biber", "kpsewhich", "tex_core_files"],
+                "qa": ["python_version", "pdfinfo", "pdftotext"],
+                "all": [
+                    "python_version",
+                    "python_docx_import",
+                    "xelatex",
+                    "biber",
+                    "kpsewhich",
+                    "tex_core_files",
+                    "pdfinfo",
+                    "pdftotext",
+                ],
+            }[stage],
+            "not_checked": [
+                "ZUFE-Thesis 模板签名（使用 check_template.py）",
+                "DOCX 可读性和内容结构（使用 prescan_docx.py）",
+                "workspace 输入和旧输出保护（使用 prepare_workspace.py）",
+            ],
+        },
         "checks": checks,
         "issues": issues,
-        "next_steps": [] if status == "passed" else [
+        "next_steps": []
+        if status == "passed"
+        else [
             "向用户说明缺失依赖的影响。",
             "Python 包或 LaTeX 发行版只能在用户明确批准后安装。",
         ],
     }
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """解析命令行参数并输出环境检查 JSON。
+
+    Args:
+        argv (list[str] | None): 显式命令行参数；None 时读取系统参数。
 
     Returns:
         int: 环境门禁通过时返回 0，否则返回 2。
@@ -223,7 +369,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default=".", help="保持接口一致，当前脚本不读取该目录。")
     parser.add_argument("--stage", choices=["minimal", "latex", "qa", "all"], default="all")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     Path(args.root).expanduser().resolve()
     result = check(args.stage)
     print_json(result)

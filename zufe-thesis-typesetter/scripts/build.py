@@ -6,11 +6,10 @@ from __future__ import annotations
 import argparse
 import shutil
 import subprocess
-import time
 from pathlib import Path
 
+from check_flow_b_gate import check as check_flow_b_gate
 from common import BUILD_TEMP_FILES, archive_path, now_iso, print_json, rel, write_json
-
 
 COMPILE_CHAIN = [
     ["xelatex", "-interaction=nonstopmode", "-halt-on-error", "-file-line-error", "main.tex"],
@@ -18,6 +17,23 @@ COMPILE_CHAIN = [
     ["xelatex", "-interaction=nonstopmode", "-halt-on-error", "-file-line-error", "main.tex"],
     ["xelatex", "-interaction=nonstopmode", "-halt-on-error", "-file-line-error", "main.tex"],
 ]
+
+
+def subprocess_output_text(output: str | bytes | None) -> str:
+    """把 subprocess 的超时输出规范为可写入日志的文本。
+
+    ``TimeoutExpired`` 在部分 Python 版本中即使启用 ``text=True`` 也可能携带
+    bytes，因此不能直接与字符串拼接。
+
+    Args:
+        output (str | bytes | None): subprocess 捕获的 stdout。
+
+    Returns:
+        str: UTF-8 解码后的日志文本。
+    """
+    if isinstance(output, bytes):
+        return output.decode("utf-8", errors="replace")
+    return output or ""
 
 
 def move_if_exists(source: Path, target: Path) -> str | None:
@@ -91,9 +107,8 @@ def run_chain(root: Path, timeout: int) -> list[dict]:
             output = f"command not found: {command[0]}\n{exc}\n"
             exit_code = 127
         except subprocess.TimeoutExpired as exc:
-            output = (exc.stdout or "") + (
-                f"\ncommand timed out after {timeout} seconds: "
-                f"{' '.join(command)}\n"
+            output = subprocess_output_text(exc.stdout) + (
+                f"\ncommand timed out after {timeout} seconds: {' '.join(command)}\n"
             )
             exit_code = 124
         ended = now_iso()
@@ -114,6 +129,32 @@ def run_chain(root: Path, timeout: int) -> list[dict]:
     return results
 
 
+def write_build_reports(root: Path, result: dict) -> None:
+    """写入机器可读和人类可读构建报告。
+
+    Args:
+        root (Path): ZUFE-Thesis 模板根目录。
+        result (dict): 本轮构建结果。
+    """
+    output_dir = root / "workspace/output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    write_json(output_dir / "build_result.json", result)
+    report = [
+        "# Build Report",
+        "",
+        f"- Status: `{result['status']}`",
+        f"- New PDF: `{result['new_pdf']}`",
+        f"- PDF: `{result['pdf']}`",
+        f"- Flow B gate: `{result['flow_b_gate']['status']}`",
+        "",
+        "## Steps",
+        "",
+    ]
+    for step in result["steps"]:
+        report.append(f"- `{' '.join(step['command'])}` -> `{step['exit_code']}` ({step['log']})")
+    (output_dir / "report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+
+
 def build(root: Path, timeout: int) -> dict:
     """执行流程 C 编译并写入构建报告。
 
@@ -124,49 +165,56 @@ def build(root: Path, timeout: int) -> dict:
     Returns:
         dict: 构建结果，同时写入 ``build_result.json`` 和 ``report.md``。
     """
-    start_time = time.time()
+    started_at = now_iso()
+    thesis_path = root / "workspace/intermediate/thesis.json"
+    gate_result = check_flow_b_gate(root, thesis_path)
+    gate_evidence = {
+        "status": gate_result.get("status"),
+        "thesis_json_fingerprint": gate_result.get("thesis_json_fingerprint"),
+        "source_docx_fingerprint": gate_result.get("source_docx_fingerprint"),
+    }
+    if gate_result.get("status") != "passed":
+        result = {
+            "flow": "C",
+            "step": "build",
+            "status": "blocked",
+            "started_at": started_at,
+            "archived": [],
+            "steps": [],
+            "new_pdf": False,
+            "pdf": None,
+            "flow_b_gate": {**gate_evidence, "issues": gate_result.get("issues", [])},
+            "next_steps": ["返回流程 B，解决门禁问题后再编译。"],
+        }
+        write_build_reports(root, result)
+        return result
+
     archived = prepare_build(root)
     steps = run_chain(root, timeout)
     pdf = root / "main.pdf"
-    new_pdf = pdf.exists() and pdf.stat().st_mtime >= start_time
+    new_pdf = pdf.exists()
     failed_steps = [step for step in steps if step["exit_code"] != 0]
     status = (
-        "passed"
-        if new_pdf and not failed_steps and len(steps) == len(COMPILE_CHAIN)
-        else "failed"
+        "passed" if new_pdf and not failed_steps and len(steps) == len(COMPILE_CHAIN) else "failed"
     )
     result = {
         "flow": "C",
         "step": "build",
         "status": status,
-        "started_at": now_iso(),
+        "started_at": started_at,
         "archived": archived,
         "steps": steps,
         "new_pdf": new_pdf,
         "pdf": "main.pdf" if pdf.exists() else None,
-        "next_steps": [] if status == "passed" else [
+        "flow_b_gate": gate_evidence,
+        "next_steps": []
+        if status == "passed"
+        else [
             "运行 diagnose_build.py 对编译失败分类。",
             "不能把已归档的旧 PDF 当成本轮输出。",
         ],
     }
-    output_dir = root / "workspace/output"
-    write_json(output_dir / "build_result.json", result)
-    report = [
-        "# Build Report",
-        "",
-        f"- Status: `{status}`",
-        f"- New PDF: `{new_pdf}`",
-        f"- PDF: `{result['pdf']}`",
-        "",
-        "## Steps",
-        "",
-    ]
-    for step in steps:
-        report.append(
-            f"- `{' '.join(step['command'])}` -> "
-            f"`{step['exit_code']}` ({step['log']})"
-        )
-    (output_dir / "report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+    write_build_reports(root, result)
     return result
 
 

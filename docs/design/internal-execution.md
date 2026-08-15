@@ -65,7 +65,7 @@ flowchart TD
         failureType -- "return_to_flow_b" --> refB
         failureType -- "user_input_required / unclassified_failure" --> reportFail["输出失败分类和下一步"]
         buildOK -- "是" --> qaPy["qa.py"]
-        qaPy --> finalStatus{"ready_to_submit / needs_review / failed"}
+        qaPy --> finalStatus{"ready_for_manual_review / needs_review / failed"}
     end
 
     finalStatus --> deliver["交付 main.pdf、report.md、qa_report.md"]
@@ -94,11 +94,11 @@ flowchart LR
 
     checkEnvLatex2["check_env.py<br/>--stage latex/all"] --> build2["build.py"]
 
-    docx --> import2["import_docx.py"]
+    docx --> import2["import_docx.py<br/>记录源文件指纹"]
     import2 --> json["workspace/intermediate/thesis.json"]
     import2 --> extracted["workspace/intermediate/extracted.md"]
 
-    json --> export2["export_assets.py"]
+    json --> export2["export_assets.py<br/>先核对源文件指纹"]
     export2 --> images["Images/word_media/"]
     export2 --> json
 
@@ -200,26 +200,26 @@ flowchart LR
 | 4 | `build.py` | 修复后按规则重试编译 |
 | 5 | `qa.py` | 检查 PDF 文本、引用、模板残留、占位符和关键源文件风险 |
 
-流程 C 的输出是 `main.pdf`、`workspace/output/report.md`、`workspace/output/qa_report.md`，以及 `ready_to_submit`、`needs_review` 或 `failed` 的交付状态。
+流程 C 的输出是 `main.pdf`、`workspace/output/report.md`、`workspace/output/qa_report.md`，以及 `ready_for_manual_review`、`needs_review` 或 `failed` 的交付状态。自动通过只表示可以进入人工视觉检查，不等于可直接提交。
 
 ## scripts 表
 
 | script | 所属阶段 | 内部职责 |
 | --- | --- | --- |
-| `common.py` | shared | 提供 JSON、路径、归档、LaTeX 转义等共享工具 |
+| `common.py` | shared | 提供 JSON、路径、归档、文件指纹、LaTeX 转义等共享工具 |
 | `check_template.py` | A | 验证模板签名，避免在错误目录写入 |
 | `prepare_workspace.py` | A | 创建标准 workspace，整理输入和旧输出 |
 | `check_env.py` | A/C | 检查 Python DOCX 环境、LaTeX/Biber、QA 工具和关键包，并输出环境 issue code |
 | `prescan_docx.py` | A | 轻量预扫描 Word，提取 metadata 候选 |
-| `import_docx.py` | B | 正式抽取源块、run 级证据和 unsupported features |
-| `export_assets.py` | B | 导出 DOCX 媒体资源，并回写资源证据 |
-| `render_basicinfo.py` | B | 渲染封面、摘要、关键词和超链接隐藏设置 |
-| `render_chapters.py` | B | 渲染章节正文、标题、表格、图片引用和 `mainbody.tex` |
-| `render_bib.py` | B | 写入已确认 BibTeX |
-| `check_flow_b_gate.py` | B | 检查流程 B 是否真的完成 |
-| `build.py` | C | 归档旧 PDF，运行 `xelatex -> biber -> xelatex -> xelatex` |
+| `import_docx.py` | B | 正式抽取源块、run 级证据、源文件指纹和 unsupported features |
+| `export_assets.py` | B | 核对源文件指纹后导出 DOCX 媒体资源，并回写资源证据 |
+| `render_basicinfo.py` | B | 渲染封面、摘要、关键词和超链接隐藏设置，并验证源块字段绑定 |
+| `render_chapters.py` | B | 拒绝重复章节目标和无效图片资源，再渲染正文、表格、图片和 `mainbody.tex` |
+| `render_bib.py` | B | 全量确认后原子写入 BibTeX，存在未决项时保留旧文件 |
+| `check_flow_b_gate.py` | B | 校验动态账本、源 DOCX 指纹和最终渲染证据 |
+| `build.py` | C | 强制通过流程 B 门禁后，归档旧 PDF 并运行固定四步编译链 |
 | `diagnose_build.py` | C | 把编译失败转成问题分类 |
-| `qa.py` | C | 生成 QA 结果和最终状态 |
+| `qa.py` | C | 绑定当前账本和源 DOCX，检查编译/正文信号并生成待人工视觉复核状态 |
 
 这个表也说明了我设计时的一个原则：如果某个规则能用脚本稳定检查，就应该尽量使用脚本和测试来检查它；如果它依赖语义判断，那就应该留给 Agent，并在 `thesis.json` 或报告里留下证据。
 
@@ -229,8 +229,22 @@ flowchart LR
 
 | tests | 主要覆盖目标 |
 | --- | --- |
-| `test_regressions.py` | DOCX run 级格式、图片锚点、unsupported features、环境提示、metadata 门禁、英文内容授权、BibTeX/引用 QA、路径越界、B 流程门禁、表格缩放风险、PDF fresh 和页数统计 |
+| `test_regressions.py` | DOCX run 格式、内容控件、纯表格 Word、重复图片、源指纹、环境提示、basicinfo 完整承接、章节/图片门禁、事务式 BibTeX、构建绑定、源码/PDF QA 和人工复核状态 |
 | `test_render_chapters.py` | 章节标题层级渲染 |
+
+### 维护者验证命令
+
+仓库根目录的 `pyproject.toml`、`.python-version` 和 `uv.lock` 只服务脚本开发与回归验证，不属于 Skill 用户运行依赖，也不会改变仅打包 `zufe-thesis-typesetter/` 的 Release 边界。
+
+```bash
+uv sync
+uv run ruff check zufe-thesis-typesetter/scripts zufe-thesis-typesetter/tests
+uv run ruff format --check zufe-thesis-typesetter/scripts zufe-thesis-typesetter/tests
+uv run ty check
+uv run pytest
+```
+
+开发环境固定最低 Python 3.10。Ruff 只启用当前代码库可承受的高信号规则；`ty` 检查 `scripts/` 的稳定代码边界；pytest 默认启用分支覆盖率，并以 65% 作为防回退基线，而不是把覆盖率数值当成行为正确性的替代品。
 
 ## 失败退回
 
@@ -239,6 +253,6 @@ flowchart LR
 - 流程 A 失败：停止在输入、模板或环境门禁，不进入正式抽取。
 - 流程 B 失败：停止在语义确认或模板写入，不进入编译。
 - 流程 C 失败：先分类；机械问题可有限修复，语义问题必须回到流程 B，环境问题必须先读取 `environment-sop.md`，需要具体平台修复时再读取环境修复 reference，并获得用户批准。
-- QA 给出 `needs_review`：PDF 可以存在，但不能证明完全没有错误；必须把风险说明给用户。
+- QA 给出 `ready_for_manual_review` 或 `needs_review`：PDF 可以存在，但自动检查不能证明视觉版式完全正确；必须把人工复核要求或具体风险说明给用户。
 
 这也是为什么 `report.md`、`qa_report.md` 和 JSON 结果很重要：它们让 Agent 能把内部失败状态翻译成用户能理解的下一步，而不是只把 LaTeX 日志或 Python 报错呈现出来。

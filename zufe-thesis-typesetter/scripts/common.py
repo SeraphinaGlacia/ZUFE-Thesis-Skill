@@ -3,14 +3,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
-import os
 import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-
 
 TEMPLATE_SIGNATURE = [
     "main.tex",
@@ -53,6 +52,23 @@ MANUAL_CROSS_REFERENCE_RE = re.compile(
 )
 LATEX_LABEL_RE = re.compile(r"\\label\s*\{([^}]+)\}")
 LATEX_REF_RE = re.compile(r"\\(?:ref|autoref|pageref|eqref)\s*\{([^}]+)\}")
+LATEX_CHAPTER_INPUT_RE = re.compile(r"\\input\s*\{(chapters/[^}]+)\}")
+
+
+def file_fingerprint(path: Path) -> dict[str, str | int]:
+    """计算文件完整性指纹。
+
+    Args:
+        path (Path): 待计算指纹的文件。
+
+    Returns:
+        dict[str, str | int]: SHA-256 和字节数。
+    """
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return {"sha256": digest.hexdigest(), "size_bytes": path.stat().st_size}
 
 
 def now_iso() -> str:
@@ -113,6 +129,46 @@ def safe_resolve_under(root: Path, path: str | Path, allowed_dir: str | Path) ->
     except ValueError as exc:
         raise ValueError(f"unsafe path outside {rel(allowed_path, root)}: {path}") from exc
     return target
+
+
+def active_chapter_files(root: Path, thesis: dict[str, Any] | None = None) -> list[Path]:
+    """返回当前账本或 mainbody 实际使用的章节文件。
+
+    Args:
+        root (Path): ZUFE-Thesis 模板根目录。
+        thesis (dict[str, Any] | None): 当前 ``thesis.json``；缺少明确结构时回退解析
+            ``chapters/mainbody.tex``。
+
+    Returns:
+        list[Path]: 位于 ``chapters`` 下、存在且参与本轮构建的文件。
+    """
+    relative_paths = {"chapters/basicinfo.tex", "chapters/mainbody.tex"}
+    chapters = []
+    if isinstance(thesis, dict):
+        structure = thesis.get("structure")
+        if isinstance(structure, dict) and isinstance(structure.get("chapters"), list):
+            chapters = structure["chapters"]
+    for chapter in chapters:
+        if isinstance(chapter, dict) and isinstance(chapter.get("file"), str):
+            relative_paths.add(chapter["file"])
+
+    mainbody = root / "chapters/mainbody.tex"
+    if not chapters and mainbody.exists():
+        text = mainbody.read_text(encoding="utf-8", errors="ignore")
+        for matched_path in LATEX_CHAPTER_INPUT_RE.findall(text):
+            relative_paths.add(
+                matched_path if matched_path.endswith(".tex") else f"{matched_path}.tex"
+            )
+
+    files = []
+    for relative_path in sorted(relative_paths):
+        try:
+            path = safe_resolve_under(root, relative_path, "chapters")
+        except ValueError:
+            continue
+        if path.exists() and path.is_file():
+            files.append(path)
+    return files
 
 
 def read_json(path: Path, default: Any | None = None) -> Any:
@@ -333,7 +389,7 @@ def parse_scalar(value: str) -> Any:
         value (str): 冒号右侧的原始字符串。
 
     Returns:
-        Any: 字符串、布尔值、整数、列表或空字符串。
+        Any: 字符串、布尔值、列表或空字符串。
     """
     if value in {"", "null", "None", "~"}:
         return ""
@@ -350,11 +406,6 @@ def parse_scalar(value: str) -> Any:
         if not inner:
             return []
         return [parse_scalar(part.strip()) for part in inner.split(",")]
-    if re.fullmatch(r"-?\d+", value):
-        try:
-            return int(value)
-        except ValueError:
-            return value
     return value
 
 

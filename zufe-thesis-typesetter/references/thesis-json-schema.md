@@ -8,12 +8,21 @@
 {
   "schema_version": "1.0",
   "source_docx": "workspace/input/thesis.docx",
+  "source_docx_fingerprint": {
+    "sha256": "<64 lowercase hex characters>",
+    "size_bytes": 123456
+  },
   "created_at": "2026-06-06T12:00:00+08:00",
   "counts": {
     "total_source_blocks": 0,
     "paragraphs": 0,
     "tables": 0,
     "images": 0,
+    "source_blocks_by_type": {
+      "paragraph": 0,
+      "table": 0,
+      "image": 0
+    },
     "unsupported_features": 0
   },
   "metadata_candidates": {},
@@ -27,6 +36,8 @@
   "warnings": []
 }
 ```
+
+`paragraphs`、`tables` 和 `images` 记录 Word 清点数量；图片独占的空锚点段落可能不会单独生成 paragraph 源块。需要核对账本块类型时使用 `source_blocks_by_type`，不要直接把 `paragraphs` 当成 paragraph 源块数。
 
 ## 源块结构
 
@@ -61,6 +72,9 @@
   "asset_status": null,
   "asset_output": null,
   "target_slot": "chapters/1_introduction.tex",
+  "metadata_fields": [],
+  "metadata_excluded_text": [],
+  "metadata_exclusion_reason": null,
   "status": "mapped",
   "confidence": 0.72,
   "requires_confirmation": false,
@@ -83,6 +97,31 @@
 - `discarded_with_reason` 必须有 `discard_reason`。
 
 不要在没有用户确认原因的情况下，把高风险源块改成 `discarded_with_reason`。
+
+## 源 DOCX 完整性
+
+- `source_docx_fingerprint` 由 `import_docx.py` 写入，包含源 DOCX 的 SHA-256 和字节数。
+- `export_assets.py` 必须先核对此指纹，防止正文抽取和图片导出来自两版不同的 Word。
+- `check_flow_b_gate.py` 在进入流程 C 前必须再次核对，覆盖无图片或跳过资源导出的情况。
+- 指纹缺失或不一致时，不得导出、编译或沿用旧账本；先确认输入，再重新运行正式抽取。
+
+## basicinfo 字段绑定
+
+映射到 `chapters/basicinfo.tex` 的源块必须声明它由哪些宏字段承接：
+
+```json
+{
+  "id": "p0002",
+  "text": "学生姓名：张三",
+  "target_slot": "chapters/basicinfo.tex",
+  "metadata_fields": ["name"],
+  "status": "mapped"
+}
+```
+
+允许字段包括 `report_style`、中英文题目和副标题、`college`、`major`、`name`、`student_id`、`mentor`、`class_name`、`date`、中英文摘要和关键词。`render_basicinfo.py` 只有在本轮实际写入值能在该源块文本或表格单元格中找到，且整个源块文字都有明确去向时，才把它标记为 `rendered`。
+
+无法由这些宏完整承接的同块文字优先改映射到合适章节。若用户确认某个具体片段不进入输出，可用 `metadata_excluded_text` 列出原文片段，并用 `metadata_exclusion_reason` 记录原因；两者必须同时存在且片段必须能在源块中找到。不得为了通过门禁随意绑定字段或笼统排除整个块。
 
 ## Run 级格式规则
 
@@ -128,10 +167,13 @@
 
 `status=needs_confirmation` 会阻止流程 B 完成。用户确认风险或完成补救后，可改为 `accepted_with_warning`、`confirmed` 或 `resolved`。
 
+内容控件中的顶层可见段落和表格会尽量进入 `source_blocks`，并在 `evidence.container_path` 留下位置证据；但内容控件仍可能包含条件、隐藏或重复内容，因此 `content_control` 默认继续要求确认。`alt_chunk` 外部导入内容不做自动展开。
+
 ## 图片资源规则
 
 - image 源块的 `evidence.docx_media_path` 指向 DOCX 内部媒体路径，例如 `word/media/image1.png`。
 - 若图片来自正文段落锚点，`evidence.anchor_paragraph_id` 和 `evidence.anchor_text` 记录位置证据。
+- 同一媒体在一个段落中出现多次时，每次出现都必须有独立 image 源块；`evidence.anchor_image_occurrence` 记录段落内出现顺序。
 - `asset_status=pending_export` 表示资源尚未复制；`asset_status=exported` 表示 `asset_output` 已指向 `Images/word_media/...`。
 - `asset_status=exported` 不代表图片语义位置已确认。图片仍需通过 `target_slot` 或章节结构确认放入哪个章节文件。
 - 已确认的图片或表格若会被正文引用，必须写入稳定 `label`，并在渲染时紧跟 `\caption{...}` 输出 `\label{...}`。
@@ -200,3 +242,5 @@ Agent 确认章节顺序后，写入：
 ```
 
 `scripts/render_chapters.py` 可以从这个结构渲染，或按 `target_slot` 对已确认源块分组。
+
+章节结构中的源块 ID 必须存在且不得跨章节重复；每个规范化后的 `file` 必须唯一，并且是 `chapters/` 下的安全 `.tex` 路径，不得使用 `chapters/basicinfo.tex` 或 `chapters/mainbody.tex` 作为普通章节文件。`render_chapters.py` 会在写文件前检查，`check_flow_b_gate.py` 会在流程 B 结束前再次校验这些约束、源块计数和最终文件。
