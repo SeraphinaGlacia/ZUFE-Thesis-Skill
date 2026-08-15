@@ -29,6 +29,7 @@ workspace/input/metadata.yaml
 - 确认状态。
 - 丢弃原因，如果被丢弃。
 - 渲染结果，如果已写入。
+- 源 DOCX 的 SHA-256 和字节数，确保后续资源导出使用同一版 Word。
 
 `workspace/intermediate/extracted.md` 只作为人类和 Agent 辅助阅读材料，不承担审计职责。
 
@@ -69,14 +70,29 @@ workspace/input/metadata.yaml
 脚本采集证据并做确定性写入。Agent 做语义判断、槽位分配、风险归并和用户确认。
 
 脚本不得编造参考文献，不得静默丢弃表格、图片或公式，也不得在低置信度时擅自猜测章节归属。
+`render_bib.py` 采用全量确认后写入：只要存在空输入、未转换条目或未确认映射，就必须保留现有 `Reference.bib`，并让已确认块继续保持 `mapped`；所有条目解决后才可原子替换目标文件。
 
 ## 暂不支持特性报告
 
-`import_docx.py` 必须检测脚注、尾注、OMML 公式、超链接、批注、修订痕迹、文本框、页眉和页脚等暂不自动转换内容，并写入 `thesis.json.unsupported_features`。
+`import_docx.py` 必须检测脚注、尾注、OMML 公式、超链接、批注、修订痕迹、文本框、内容控件、`altChunk` 外部导入内容、链接图片、Word 域、自动编号、图表/SmartArt、OLE 对象、页眉和页脚等暂不自动转换内容，并写入 `thesis.json.unsupported_features`。
 
 - 报告只记录类型、数量、位置和短摘要，不保存 XML、base64 或大段原文。
 - 默认状态为 `needs_confirmation`；用户或 Agent 明确处理后，可改为 `accepted_with_warning`、`confirmed` 或 `resolved`。
 - `check_flow_b_gate.py` 必须阻止未确认的 unsupported feature 进入流程 C。
+
+## 自动转换边界
+
+脚本可以稳定清点普通段落、段落 run 格式、顶层表格、内嵌媒体文件和可见正文顺序。对于顶层内容控件，脚本会展开其中可见段落和表格，但仍保留风险项。
+
+下列内容不能仅凭当前脚本证明已完整转换：
+
+- 合并单元格、嵌套表格、单元格内复杂格式和表格布局语义。
+- 图片裁剪、旋转、尺寸、浮动环绕、链接图片和精确版面位置。
+- Word 域、自动编号、交叉引用、图表对象、SmartArt、OLE 对象和宏。
+- 内容控件中的条件、隐藏、重复内容，以及 `altChunk` 外部导入正文。
+- 公式、脚注、尾注、批注、修订、文本框和页眉页脚的自动语义转换。
+
+`unsupported_features` 是已知高风险特性的尽力检测，不是“列表为空就证明 Word 没有复杂内容”。遇到版面复杂、对象较多或抽取数量异常的 Word，Agent 必须向用户说明边界并人工核对源文档。
 
 ## 图片锚点与资源导出
 
@@ -86,6 +102,14 @@ workspace/input/metadata.yaml
 - `export_assets.py` 只表示图片资源已复制到 `Images/word_media/`，应写入 `asset_status` 和 `asset_output`。
 - 资源已导出不等于语义位置已确认；不得仅因为图片文件导出成功就把 `status` 改成 `mapped`。
 - 无法定位正文锚点的媒体仍要进入清点账本，并保持 `needs_confirmation`。
+- `export_assets.py` 必须先核对 `source_docx_fingerprint`；指纹缺失或变化时停止，避免正文和图片来自不同 Word 版本。
+
+## basicinfo 映射证据
+
+- 映射到 `chapters/basicinfo.tex` 的源块必须声明 `metadata_fields`，例如姓名块声明 `metadata_fields: ["name"]`。
+- `render_basicinfo.py` 必须核对本轮写入的字段值能在源块文本或表格单元格中找到，才能写入 `render_result` 并改为 `rendered`。
+- 只指定 `target_slot=chapters/basicinfo.tex` 不构成渲染证据；未绑定字段、字段值不匹配或源块状态未确认时，结果保持 `needs_confirmation`。
+- 验证必须覆盖整个源块，而不只是找到其中一个字段值。不能由宏承接的同块文字须改映射，或在获得确认后用 `metadata_excluded_text` 和 `metadata_exclusion_reason` 记录具体片段与原因。
 
 ## 图表编号与正文引用
 
@@ -148,8 +172,11 @@ Word 段落中上标、下标是可见格式，属于必须保留的内容证据
 进入流程 C 前，运行 `scripts/check_flow_b_gate.py`。只有满足以下条件，流程 B 才通过：
 
 - 源块数量与清点账本一致。
+- 当前 `source_docx` 的 SHA-256 和字节数仍与正式抽取时一致。
+- 源块 ID 唯一、状态值合法，章节结构不引用不存在或重复归属的源块，且不同章节不得解析到同一个 `.tex` 文件。
 - 每个非空、非噪声源块都已渲染或带原因丢弃。
 - 每个目标槽位存在并有渲染证据。
+- 图片块必须已经导出，`asset_output` 位于 `Images/` 下且实际存在；章节路径不能作为图片路径兜底。
 - 低置信度结构问题有确认记录。
 - 没有正文段落处于章节归属不明状态。
 - 没有图片、表格、公式或参考文献处于已抽取但未放置状态。

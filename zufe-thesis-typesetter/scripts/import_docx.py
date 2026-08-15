@@ -4,12 +4,20 @@
 from __future__ import annotations
 
 import argparse
-import zipfile
 import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
 from typing import Any
 
-from common import block_summary, classify_text, now_iso, print_json, rel, write_json
+from common import (
+    block_summary,
+    classify_text,
+    file_fingerprint,
+    now_iso,
+    print_json,
+    rel,
+    write_json,
+)
 from prescan_docx import metadata_candidates
 
 REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -44,7 +52,37 @@ UNSUPPORTED_FEATURES = {
         "severity": "medium",
         "summary": "检测到页眉或页脚，第一版不把页眉页脚当作正文自动转换。",
     },
+    "content_control": {
+        "severity": "high",
+        "summary": "检测到 Word 内容控件；已展开可见块，但仍需确认没有隐藏、重复或条件内容。",
+    },
+    "alt_chunk": {
+        "severity": "high",
+        "summary": "检测到外部导入内容（altChunk），第一版无法可靠抽取其正文。",
+    },
+    "linked_image": {
+        "severity": "high",
+        "summary": "检测到外部链接图片；DOCX 中没有可独立导出的内嵌媒体内容。",
+    },
+    "chart_or_smartart": {
+        "severity": "high",
+        "summary": "检测到 Word 图表或 SmartArt，第一版无法可靠转换其数据和可编辑结构。",
+    },
+    "ole_object": {
+        "severity": "high",
+        "summary": "检测到 OLE 嵌入对象，第一版不会执行或转换其中内容。",
+    },
+    "field_code": {
+        "severity": "medium",
+        "summary": "检测到 Word 域代码；可见结果可能被抽取，但域语义和自动更新不会保留。",
+    },
+    "automatic_numbering": {
+        "severity": "medium",
+        "summary": "检测到 Word 自动编号；段落文本可能不包含界面中显示的编号。",
+    },
 }
+
+TRANSPARENT_BODY_CONTAINERS = {"sdt", "sdtContent", "customXml", "smartTag"}
 
 
 def import_docx_libs() -> tuple[Any, Any, Any]:
@@ -57,9 +95,9 @@ def import_docx_libs() -> tuple[Any, Any, Any]:
         RuntimeError: 当前 Python 环境无法导入 ``python-docx`` 时抛出。
     """
     try:
-        import docx  # type: ignore
-        from docx.table import Table  # type: ignore
-        from docx.text.paragraph import Paragraph  # type: ignore
+        import docx
+        from docx.table import Table
+        from docx.text.paragraph import Paragraph
     except Exception as exc:
         raise RuntimeError(f"python-docx 不可用：{exc}") from exc
     return docx, Paragraph, Table
@@ -124,9 +162,7 @@ def run_payload(paragraph: Any) -> list[dict]:
                 "italic": bool(run.italic),
                 "superscript": bool(run.font.superscript),
                 "subscript": bool(run.font.subscript),
-                "font_size_pt": (
-                    round(run.font.size.pt, 2) if run.font.size is not None else None
-                ),
+                "font_size_pt": (round(run.font.size.pt, 2) if run.font.size is not None else None),
             }
         )
     return runs
@@ -239,6 +275,36 @@ def feature_entry(feature_type: str, count: int, locations: list[dict]) -> dict:
     }
 
 
+def count_linked_images(
+    archive: zipfile.ZipFile,
+    part_names: list[str],
+) -> tuple[int, list[dict]]:
+    """统计使用外部关系而非内嵌媒体的图片。
+
+    Args:
+        archive (zipfile.ZipFile): 已打开的 DOCX ZIP 包。
+        part_names (list[str]): 待扫描的 Word XML 部件。
+
+    Returns:
+        tuple[int, list[dict]]: 外部链接图片总数和部件位置。
+    """
+    total = 0
+    locations = []
+    for name in part_names:
+        root = xml_root(archive, name)
+        if root is None:
+            continue
+        count = sum(
+            1
+            for element in root.iter()
+            if local_name(element.tag) == "blip" and bool(element.attrib.get(f"{{{REL_NS}}}link"))
+        )
+        if count:
+            total += count
+            locations.append({"part": name, "count": count})
+    return total, locations
+
+
 def detect_unsupported_features(docx_path: Path) -> list[dict]:
     """检测第一版暂不自动转换的 DOCX 特性。
 
@@ -263,6 +329,12 @@ def detect_unsupported_features(docx_path: Path) -> list[dict]:
             ("equation_omml", parts, {"oMath", "oMathPara"}, None),
             ("textbox", parts, {"txbxContent"}, None),
             ("tracked_changes", parts, {"ins", "del", "moveFrom", "moveTo"}, None),
+            ("content_control", document_parts, {"sdt"}, None),
+            ("alt_chunk", document_parts, {"altChunk"}, None),
+            ("chart_or_smartart", document_parts, {"chart", "relIds"}, None),
+            ("ole_object", document_parts, {"OLEObject", "object"}, None),
+            ("field_code", document_parts, {"fldSimple", "fldChar", "instrText"}, None),
+            ("automatic_numbering", document_parts, {"numPr"}, None),
             ("comment", [name for name in parts if name == "word/comments.xml"], {"comment"}, None),
             (
                 "footnote_or_endnote",
@@ -281,6 +353,12 @@ def detect_unsupported_features(docx_path: Path) -> list[dict]:
             if count:
                 features.append(feature_entry(feature_type, count, locations))
 
+        linked_image_count, linked_image_locations = count_linked_images(archive, document_parts)
+        if linked_image_count:
+            features.append(
+                feature_entry("linked_image", linked_image_count, linked_image_locations)
+            )
+
         header_footer_parts = [
             name
             for name in names
@@ -296,6 +374,24 @@ def detect_unsupported_features(docx_path: Path) -> list[dict]:
                 )
             )
     return features
+
+
+def iter_body_blocks(parent: Any, containers: tuple[str, ...] = ()):
+    """按正文顺序枚举段落和表格，并展开透明 XML 容器。
+
+    Args:
+        parent (Any): Word XML 正文或容器节点。
+        containers (tuple[str, ...]): 当前节点外层容器路径。
+
+    Yields:
+        tuple[Any, tuple[str, ...]]: 正文块 XML 节点及其容器路径。
+    """
+    for child in parent.iterchildren():
+        tag = local_name(child.tag)
+        if tag in {"p", "tbl"}:
+            yield child, containers
+        elif tag in TRANSPARENT_BODY_CONTAINERS:
+            yield from iter_body_blocks(child, (*containers, tag))
 
 
 def relationship_media_path(paragraph: Any, relationship_id: str) -> str | None:
@@ -336,23 +432,22 @@ def paragraph_image_refs(
         list[dict]: 图片关系、媒体路径和锚点段落证据列表。
     """
     refs = []
-    seen = set()
-    for blip in paragraph._element.xpath(".//*[local-name()='blip']"):
+    for occurrence, blip in enumerate(
+        paragraph._element.xpath(".//*[local-name()='blip']"),
+        start=1,
+    ):
         relationship_id = blip.get(f"{{{REL_NS}}}embed") or blip.get(f"{{{REL_NS}}}link")
         if not relationship_id:
             continue
         media_path = relationship_media_path(paragraph, relationship_id)
         if not media_path:
             continue
-        key = (relationship_id, media_path)
-        if key in seen:
-            continue
-        seen.add(key)
         refs.append(
             {
                 "relationship_id": relationship_id,
                 "docx_media_path": media_path,
                 "anchor_paragraph_id": paragraph_id,
+                "anchor_image_occurrence": occurrence,
                 "anchor_text": block_summary(anchor_text),
             }
         )
@@ -440,23 +535,24 @@ def extract(root: Path, docx_path: Path) -> dict:
     Returns:
         dict: 流程 B 抽取结果和下一步提示。
     """
-    docx, Paragraph, Table = import_docx_libs()
+    docx, paragraph_class, table_class = import_docx_libs()
     document = docx.Document(str(docx_path))
     blocks = []
     markdown = ["# DOCX 抽取源块", ""]
     paragraph_count = table_count = 0
     non_empty_texts = []
+    metadata_tables = []
     order = 0
     image_count = 0
     anchored_media_paths = set()
     unsupported_features = detect_unsupported_features(docx_path)
 
-    for child in document.element.body.iterchildren():
-        tag = child.tag.rsplit("}", 1)[-1]
+    for child, containers in iter_body_blocks(document.element.body):
+        tag = local_name(child.tag)
         if tag == "p":
             paragraph_count += 1
             paragraph_id = f"p{paragraph_count:04d}"
-            paragraph = Paragraph(child, document)
+            paragraph = paragraph_class(child, document)
             text = paragraph.text.strip()
             style = getattr(paragraph.style, "name", "")
             image_refs = paragraph_image_refs(paragraph, paragraph_id, text)
@@ -475,6 +571,10 @@ def extract(root: Path, docx_path: Path) -> dict:
             if text or not image_refs:
                 order += 1
                 anchor_block_order = order
+                evidence = paragraph_evidence(paragraph)
+                if containers:
+                    evidence["container_path"] = list(containers)
+                    evidence["inside_content_control"] = "sdt" in containers
                 block = {
                     "id": paragraph_id,
                     "order": order,
@@ -483,7 +583,7 @@ def extract(root: Path, docx_path: Path) -> dict:
                     "text": text,
                     "summary": block_summary(text),
                     "runs": run_payload(paragraph),
-                    "evidence": paragraph_evidence(paragraph),
+                    "evidence": evidence,
                     "target_slot": None,
                     "status": status,
                     "confidence": confidence,
@@ -510,8 +610,13 @@ def extract(root: Path, docx_path: Path) -> dict:
         elif tag == "tbl":
             table_count += 1
             order += 1
-            table = Table(child, document)
+            table = table_class(child, document)
+            metadata_tables.append(table)
             payload = table_payload(table)
+            evidence = {"position": order}
+            if containers:
+                evidence["container_path"] = list(containers)
+                evidence["inside_content_control"] = "sdt" in containers
             block = {
                 "id": f"t{table_count:04d}",
                 "order": order,
@@ -520,7 +625,7 @@ def extract(root: Path, docx_path: Path) -> dict:
                 "text": "",
                 "summary": f"表格 {payload['row_count']}x{payload['column_count']}",
                 "table": payload,
-                "evidence": {"position": order},
+                "evidence": evidence,
                 "target_slot": None,
                 "status": "needs_confirmation",
                 "confidence": 0.4,
@@ -549,15 +654,20 @@ def extract(root: Path, docx_path: Path) -> dict:
     thesis = {
         "schema_version": "1.0",
         "source_docx": rel(docx_path, root),
+        "source_docx_fingerprint": file_fingerprint(docx_path),
         "created_at": now_iso(),
         "counts": {
             "total_source_blocks": len(blocks),
             "paragraphs": paragraph_count,
             "tables": table_count,
             "images": image_count,
+            "source_blocks_by_type": {
+                source_type: sum(1 for block in blocks if block.get("source_type") == source_type)
+                for source_type in ("paragraph", "table", "image")
+            },
             "unsupported_features": sum(feature["count"] for feature in unsupported_features),
         },
-        "metadata_candidates": metadata_candidates(non_empty_texts),
+        "metadata_candidates": metadata_candidates(non_empty_texts, metadata_tables),
         "metadata": {},
         "structure": {"chapters": []},
         "unsupported_features": unsupported_features,

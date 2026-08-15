@@ -211,7 +211,9 @@ def prepare(
         "status": status,
         "checks": checks,
         "canonical_docx": rel(target, root),
-        "next_steps": [] if status == "passed" else [
+        "next_steps": []
+        if status == "passed"
+        else [
             "向用户确认如何处理 Word 文件或旧输出。",
             "只有说明原文件会离开原位置并获得批准后，才使用 --move-word。",
             "只有获得用户批准后，才使用 --archive-existing-output。",

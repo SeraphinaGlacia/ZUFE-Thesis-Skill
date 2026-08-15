@@ -8,7 +8,7 @@ import shutil
 import zipfile
 from pathlib import Path
 
-from common import print_json, read_json, rel, safe_resolve_under, write_json
+from common import file_fingerprint, print_json, read_json, rel, safe_resolve_under, write_json
 
 
 def export_assets(root: Path, docx_path: Path, thesis_path: Path) -> dict:
@@ -22,6 +22,49 @@ def export_assets(root: Path, docx_path: Path, thesis_path: Path) -> dict:
     Returns:
         dict: 资源导出结果，包含已复制媒体文件列表。
     """
+    thesis = read_json(thesis_path)
+    if not isinstance(thesis, dict):
+        return {
+            "flow": "B",
+            "step": "export_assets",
+            "status": "blocked",
+            "gate": "thesis_json_structure",
+            "detail": "thesis.json 顶层必须是 JSON 对象。",
+            "next_steps": ["修复或重新生成 thesis.json 后再导出资源。"],
+        }
+    expected_fingerprint = thesis.get("source_docx_fingerprint")
+    if not isinstance(expected_fingerprint, dict):
+        return {
+            "flow": "B",
+            "step": "export_assets",
+            "status": "blocked",
+            "gate": "source_docx_fingerprint_missing",
+            "detail": "thesis.json 没有源 DOCX 指纹，无法证明资源与抽取正文来自同一文件。",
+            "next_steps": ["重新运行 import_docx.py 生成带指纹的 thesis.json。"],
+        }
+    actual_fingerprint = file_fingerprint(docx_path)
+    if actual_fingerprint != expected_fingerprint:
+        return {
+            "flow": "B",
+            "step": "export_assets",
+            "status": "blocked",
+            "gate": "source_docx_changed",
+            "expected_fingerprint": expected_fingerprint,
+            "actual_fingerprint": actual_fingerprint,
+            "detail": "当前 DOCX 与生成 thesis.json 时的文件不一致，已停止资源导出。",
+            "next_steps": ["确认正确的 DOCX 后，重新运行 import_docx.py 和 export_assets.py。"],
+        }
+    source_blocks = thesis.get("source_blocks", [])
+    if not isinstance(source_blocks, list):
+        return {
+            "flow": "B",
+            "step": "export_assets",
+            "status": "blocked",
+            "gate": "thesis_json_structure",
+            "detail": "thesis.json.source_blocks 必须是列表。",
+            "next_steps": ["修复或重新生成 thesis.json 后再导出资源。"],
+        }
+
     output_dir = safe_resolve_under(root, "Images/word_media", "Images")
     output_dir.mkdir(parents=True, exist_ok=True)
     extracted = []
@@ -34,10 +77,12 @@ def export_assets(root: Path, docx_path: Path, thesis_path: Path) -> dict:
                 shutil.copyfileobj(source, destination)
             extracted.append({"docx_media_path": name, "output": rel(target, root)})
 
-    thesis = read_json(thesis_path)
     by_media = {entry["docx_media_path"]: entry["output"] for entry in extracted}
-    for block in thesis.get("source_blocks", []):
-        media_path = block.get("evidence", {}).get("docx_media_path")
+    for block in source_blocks:
+        if not isinstance(block, dict):
+            continue
+        evidence = block.get("evidence")
+        media_path = evidence.get("docx_media_path") if isinstance(evidence, dict) else None
         if media_path in by_media:
             block["asset_output"] = by_media[media_path]
             block["asset_status"] = "exported"
@@ -63,7 +108,7 @@ def main() -> int:
     """解析命令行参数并执行 DOCX 媒体导出。
 
     Returns:
-        int: 导出脚本固定返回 0；具体风险由流程 B 门禁继续判断。
+        int: 导出成功时返回 0，源文件或账本门禁阻塞时返回 2。
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default=".")
@@ -83,7 +128,7 @@ def main() -> int:
     )
     result = export_assets(root, docx_path, thesis_path)
     print_json(result)
-    return 0
+    return 0 if result["status"] == "passed" else 2
 
 
 if __name__ == "__main__":

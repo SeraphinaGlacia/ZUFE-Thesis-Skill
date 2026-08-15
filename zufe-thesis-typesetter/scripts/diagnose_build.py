@@ -9,16 +9,17 @@ from pathlib import Path
 
 from common import print_json, write_json
 
-
 PATTERNS = [
     (
         "environment_issue",
         r"command not found|not recognized|I can't find the format file|"
-        r"font.*not found|File `.+\\.sty' not found",
+        r"font[^\r\n]*not found|"
+        r"(?:LaTeX Error:\s*)?File\s+[`'\"]?[^`'\"\r\n]+\.sty[`'\"]?\s+not found",
     ),
     (
         "user_input_required",
-        r"File `([^']+\\.(png|jpg|jpeg|pdf|eps))' not found|Cannot find image",
+        r"File\s+[`'\"]?[^`'\"\r\n]+\.(?:png|jpe?g|pdf|eps|svg)[`'\"]?\s+not found|"
+        r"Cannot find image",
     ),
     (
         "mechanical_fixable",
@@ -108,10 +109,7 @@ def diagnose(root: Path) -> dict:
     output_dir = root / "workspace/output"
     if output_dir.exists():
         logs.extend(
-            sorted(
-                str(path.relative_to(root))
-                for path in output_dir.glob("build-step-*.log")
-            )
+            sorted(str(path.relative_to(root)) for path in output_dir.glob("build-step-*.log"))
         )
     combined = "\n".join(read_log(root, log) for log in logs)
     issues = classify(combined)

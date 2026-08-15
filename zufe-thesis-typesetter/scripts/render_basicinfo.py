@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
-
 from typing import Any
 
 from common import (
@@ -67,8 +67,7 @@ def generated_english_requires_confirmation(thesis_meta: dict) -> bool:
     ):
         return True
     return bool(
-        thesis_meta.get("abstract_en_generated")
-        or thesis_meta.get("keywords_en_generated")
+        thesis_meta.get("abstract_en_generated") or thesis_meta.get("keywords_en_generated")
     )
 
 
@@ -131,6 +130,208 @@ REQUIRED_METADATA_FIELDS = [
     ("class_name", ("class_name", "className")),
     ("date", ("date", "today")),
 ]
+
+BASICINFO_METADATA_FIELDS = {
+    "report_style",
+    "thesis_title_cn",
+    "thesis_title_abs_cn",
+    "thesis_title_en",
+    "thesis_subtitle_cn",
+    "thesis_subtitle_en",
+    "college",
+    "major",
+    "name",
+    "student_id",
+    "mentor",
+    "class_name",
+    "date",
+    "abstract_cn",
+    "abstract_en",
+    "keywords_cn",
+    "keywords_en",
+}
+REPORT_STYLE_EVIDENCE = {
+    "1": ["专业实践报告", "专业实践", "实践报告", "专业实习"],
+    "0": ["本科毕业论文", "毕业论文", "学位论文", "本科论文"],
+}
+BASICINFO_FIELD_LABELS = {
+    "report_style": ["报告类型", "论文类型"],
+    "thesis_title_cn": ["题目", "论文题目", "报告题目", "中文题目"],
+    "thesis_title_abs_cn": ["摘要页题目"],
+    "thesis_title_en": ["英文题目", "English Title"],
+    "thesis_subtitle_cn": ["副标题", "中文副标题"],
+    "thesis_subtitle_en": ["英文副标题", "English Subtitle"],
+    "college": ["学院", "学院名称"],
+    "major": ["专业", "专业名称"],
+    "name": ["姓名", "学生姓名", "作者"],
+    "student_id": ["学号", "学生学号"],
+    "mentor": ["导师", "指导教师", "指导老师"],
+    "class_name": ["班级", "班级名称"],
+    "date": ["日期", "完成日期"],
+    "abstract_cn": ["摘要", "中文摘要"],
+    "abstract_en": ["Abstract", "英文摘要"],
+    "keywords_cn": ["关键词", "中文关键词"],
+    "keywords_en": ["Keywords", "Key words", "英文关键词"],
+}
+
+
+def normalized_evidence(value: Any) -> str:
+    """规范化源块证据，忽略 Word 中无意义的空白差异。
+
+    Args:
+        value (Any): 待规范化的文本值。
+
+    Returns:
+        str: 去除空白并统一大小写后的文本。
+    """
+    return re.sub(r"\s+", "", str(value or "")).casefold()
+
+
+def source_block_evidence(block: dict) -> str:
+    """汇总段落或表格源块中的可见文本证据。
+
+    Args:
+        block (dict): ``thesis.json`` 源块。
+
+    Returns:
+        str: 可用于字段值核对的规范化文本。
+    """
+    parts = [str(block.get("text") or "")]
+    table = block.get("table")
+    if isinstance(table, dict):
+        for row in table.get("rows", []):
+            if isinstance(row, list):
+                parts.extend(str(cell or "") for cell in row)
+    return normalized_evidence("\n".join(parts))
+
+
+def metadata_field_fragments(field: str, value: Any) -> list[str]:
+    """生成必须能在源块中找到的字段证据片段。
+
+    Args:
+        field (str): basicinfo 规范字段名。
+        value (Any): 实际写入 LaTeX 的字段值。
+
+    Returns:
+        list[str]: 需要逐项匹配的非空文本片段。
+    """
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item).strip()]
+    text = str(value or "").strip()
+    return [text] if text else []
+
+
+def block_metadata_fields(block: dict) -> list[str]:
+    """读取源块声明的 basicinfo 字段绑定。
+
+    Args:
+        block (dict): ``thesis.json`` 源块。
+
+    Returns:
+        list[str]: 去重后的规范字段名列表。
+    """
+    raw_fields = block.get("metadata_fields")
+    if raw_fields is None and block.get("metadata_field"):
+        raw_fields = [block["metadata_field"]]
+    if isinstance(raw_fields, str):
+        raw_fields = [raw_fields]
+    if not isinstance(raw_fields, list):
+        return []
+    return list(
+        dict.fromkeys(
+            str(field).strip() for field in raw_fields if field is not None and str(field).strip()
+        )
+    )
+
+
+def block_text_list(block: dict, key: str) -> list[str]:
+    """读取源块中显式声明的文本片段列表。
+
+    Args:
+        block (dict): ``thesis.json`` 源块。
+        key (str): 字符串或字符串列表字段名。
+
+    Returns:
+        list[str]: 去除空项后的文本片段。
+    """
+    values = block.get(key, [])
+    if isinstance(values, str):
+        values = [values]
+    if not isinstance(values, list):
+        return []
+    return [str(value).strip() for value in values if str(value).strip()]
+
+
+def verify_basicinfo_block(
+    block: dict, field_values: dict[str, Any]
+) -> tuple[list[str], list[str]]:
+    """验证源块内容确实由声明的 metadata 字段承接。
+
+    Args:
+        block (dict): 待验证的源块。
+        field_values (dict[str, Any]): 本轮实际渲染的规范字段值。
+
+    Returns:
+        tuple[list[str], list[str]]: 已验证字段和未通过原因。
+    """
+    fields = block_metadata_fields(block)
+    if not fields:
+        return [], ["missing_metadata_fields"]
+
+    evidence = source_block_evidence(block)
+    verified = []
+    problems = []
+    for field in fields:
+        if field not in BASICINFO_METADATA_FIELDS:
+            problems.append(f"unknown_field:{field}")
+            continue
+        if field == "report_style":
+            report_style_options = REPORT_STYLE_EVIDENCE.get(str(field_values.get(field)), [])
+            if any(normalized_evidence(option) in evidence for option in report_style_options):
+                verified.append(field)
+            else:
+                problems.append("source_value_mismatch:report_style")
+            continue
+        fragments = metadata_field_fragments(field, field_values.get(field))
+        if not fragments:
+            problems.append(f"empty_rendered_value:{field}")
+            continue
+        missing = [
+            fragment for fragment in fragments if normalized_evidence(fragment) not in evidence
+        ]
+        if missing:
+            problems.append(f"source_value_mismatch:{field}")
+            continue
+        verified.append(field)
+
+    covered_fragments = []
+    for field in verified:
+        covered_fragments.extend(BASICINFO_FIELD_LABELS.get(field, []))
+        if field == "report_style":
+            covered_fragments.extend(REPORT_STYLE_EVIDENCE.get(str(field_values.get(field)), []))
+        else:
+            covered_fragments.extend(metadata_field_fragments(field, field_values.get(field)))
+
+    remaining = evidence
+    for fragment in sorted(
+        covered_fragments, key=lambda value: len(normalized_evidence(value)), reverse=True
+    ):
+        remaining = remaining.replace(normalized_evidence(fragment), "")
+
+    excluded_fragments = block_text_list(block, "metadata_excluded_text")
+    if excluded_fragments and not str(block.get("metadata_exclusion_reason") or "").strip():
+        problems.append("missing_metadata_exclusion_reason")
+    for fragment in excluded_fragments:
+        normalized_fragment = normalized_evidence(fragment)
+        if normalized_fragment not in remaining:
+            problems.append("metadata_excluded_text_mismatch")
+            continue
+        remaining = remaining.replace(normalized_fragment, "")
+
+    remaining = re.sub(r"[\s:：,，;；。.!！?？/|\\()（）\[\]【】{}<>《》_-]+", "", remaining)
+    if remaining:
+        problems.append(f"uncovered_source_text:{remaining[:40]}")
+    return verified, problems
 
 
 def required_metadata_missing(metadata: dict) -> list[str]:
@@ -246,14 +447,31 @@ def render(root: Path, metadata_path: Path, thesis_path: Path | None) -> dict:
         dict: 渲染结果；缺关键确认信息时返回 blocked。
     """
     metadata = load_metadata_yaml(metadata_path)
-    thesis = (
-        read_json(thesis_path, default={})
-        if thesis_path and thesis_path.exists()
-        else {}
-    )
+    thesis = read_json(thesis_path, default={}) if thesis_path and thesis_path.exists() else {}
+    if not isinstance(thesis, dict):
+        return {
+            "flow": "B",
+            "step": "render_basicinfo",
+            "status": "blocked",
+            "gate": "thesis_json_structure",
+            "detail": "thesis.json 顶层必须是 JSON 对象。",
+            "next_steps": ["修复或重新生成 thesis.json 后再渲染。"],
+        }
     thesis_meta = thesis.get("metadata", {})
+    source_blocks = thesis.get("source_blocks", [])
+    if not isinstance(thesis_meta, dict) or not isinstance(source_blocks, list):
+        return {
+            "flow": "B",
+            "step": "render_basicinfo",
+            "status": "blocked",
+            "gate": "thesis_json_structure",
+            "detail": "thesis.json.metadata 必须是对象，source_blocks 必须是列表。",
+            "next_steps": ["修复或重新生成 thesis.json 后再渲染。"],
+        }
     abstracts = thesis_meta.get("abstracts", {})
     keywords = thesis_meta.get("keywords", {})
+    abstracts = abstracts if isinstance(abstracts, dict) else {}
+    keywords = keywords if isinstance(keywords, dict) else {}
 
     missing_metadata = required_metadata_missing(metadata)
     if missing_metadata:
@@ -291,9 +509,7 @@ def render(root: Path, metadata_path: Path, thesis_path: Path | None) -> dict:
     title_en = metadata_value(metadata, "thesis_title_en", "title_en", default="")
     subtitle_cn = metadata_value(metadata, "thesis_subtitle_cn", "subtitle_cn", default="")
     subtitle_en = metadata_value(metadata, "thesis_subtitle_en", "subtitle_en", default="")
-    abstract_cn = (
-        thesis_meta.get("abstract_cn") or abstracts.get("cn") or abstracts.get("zh") or ""
-    )
+    abstract_cn = thesis_meta.get("abstract_cn") or abstracts.get("cn") or abstracts.get("zh") or ""
     abstract_en = thesis_meta.get("abstract_en") or abstracts.get("en") or ""
     keywords_cn = thesis_meta.get("keywords_cn") or keywords.get("cn") or keywords.get("zh") or ""
     keywords_en = thesis_meta.get("keywords_en") or keywords.get("en") or ""
@@ -305,6 +521,26 @@ def render(root: Path, metadata_path: Path, thesis_path: Path | None) -> dict:
     )
     if english_choice_result:
         return english_choice_result
+
+    field_values = {
+        "report_style": report_style,
+        "thesis_title_cn": title_cn,
+        "thesis_title_abs_cn": title_abs_cn,
+        "thesis_title_en": title_en,
+        "thesis_subtitle_cn": subtitle_cn,
+        "thesis_subtitle_en": subtitle_en,
+        "college": metadata_value(metadata, "college", "deptName", default=""),
+        "major": metadata_value(metadata, "major", "majorName", default=""),
+        "name": metadata_value(metadata, "name", "yourName", default=""),
+        "student_id": metadata_value(metadata, "student_id", "studentID", default=""),
+        "mentor": metadata_value(metadata, "mentor", "mentorName", default=""),
+        "class_name": metadata_value(metadata, "class_name", "className", default=""),
+        "date": metadata_value(metadata, "date", "today", default=""),
+        "abstract_cn": abstract_cn,
+        "abstract_en": abstract_en,
+        "keywords_cn": keywords_cn,
+        "keywords_en": keywords_en,
+    }
 
     lines = [
         "% Generated by zufe-thesis-typesetter. Edit metadata.yaml/thesis.json, then rerender.",
@@ -360,32 +596,72 @@ def render(root: Path, metadata_path: Path, thesis_path: Path | None) -> dict:
     target = safe_resolve_under(root, "chapters/basicinfo.tex", "chapters")
     target.write_text("\n".join(lines), encoding="utf-8")
 
+    unverified_blocks = []
     if thesis_path and thesis_path.exists():
-        thesis.setdefault("render_log", []).append(
-            {
-                "step": "render_basicinfo",
-                "status": "completed",
-                "target": rel(target, root),
-                "rendered_at": now_iso(),
-            }
-        )
-        for block in thesis.get("source_blocks", []):
-            if (
-                block.get("target_slot") == "chapters/basicinfo.tex"
-                and block.get("status") == "mapped"
-            ):
+        for block in source_blocks:
+            if not isinstance(block, dict):
+                unverified_blocks.append({"block_id": None, "reasons": ["source_block_not_object"]})
+                continue
+            if block.get("target_slot") != "chapters/basicinfo.tex":
+                continue
+            if block.get("status") == "discarded_with_reason":
+                continue
+            if block.get("status") not in {"mapped", "rendered"}:
+                unverified_blocks.append(
+                    {
+                        "block_id": block.get("id"),
+                        "reasons": [f"source_block_state:{block.get('status')}"],
+                    }
+                )
+                continue
+            verified_fields, problems = verify_basicinfo_block(block, field_values)
+            if not problems:
                 block["status"] = "rendered"
                 block["render_result"] = {
                     "path": "chapters/basicinfo.tex",
                     "kind": "latex_macro",
+                    "metadata_fields": verified_fields,
+                    "evidence": "all_bound_values_found_in_source_block",
                 }
+            else:
+                block["status"] = "mapped"
+                block["render_result"] = None
+                unverified_blocks.append(
+                    {
+                        "block_id": block.get("id"),
+                        "metadata_fields": block_metadata_fields(block),
+                        "reasons": problems,
+                    }
+                )
+        result_status = "needs_confirmation" if unverified_blocks else "passed"
+        thesis.setdefault("render_log", []).append(
+            {
+                "step": "render_basicinfo",
+                "status": result_status,
+                "target": rel(target, root),
+                "rendered_at": now_iso(),
+                "unverified_blocks": unverified_blocks,
+            }
+        )
         write_json(thesis_path, thesis)
+    else:
+        result_status = "passed"
 
     return {
         "flow": "B",
         "step": "render_basicinfo",
-        "status": "passed",
+        "status": result_status,
         "target": rel(target, root),
+        "gate": "basicinfo_source_evidence" if unverified_blocks else None,
+        "unverified_blocks": unverified_blocks,
+        "next_steps": (
+            [
+                "为每个 basicinfo 源块声明 metadata_fields，并确认实际字段值能在源块中找到。",
+                "不能由宏承接的同块文字必须改映射，或用 metadata_excluded_text 和 metadata_exclusion_reason 明确记录。",
+            ]
+            if unverified_blocks
+            else []
+        ),
     }
 
 

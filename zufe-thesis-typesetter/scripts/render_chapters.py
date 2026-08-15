@@ -8,6 +8,7 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
+from check_flow_b_gate import ledger_schema_issues
 from common import (
     latex_escape,
     now_iso,
@@ -94,10 +95,11 @@ def apply_reference_rewrites(rendered_text: str, rewrites: list[dict] | None) ->
         prepared.append((rendered_source, replacement))
     prepared.sort(key=lambda item: len(item[0]), reverse=True)
     for rendered_source, replacement in prepared:
-        pattern = re.compile(
-            re.escape(rendered_source) + r"(?![0-9０-９.-])"
+        pattern = re.compile(re.escape(rendered_source) + r"(?![0-9０-９.-])")
+        rendered_text = pattern.sub(
+            lambda _match, replacement=replacement: replacement,
+            rendered_text,
         )
-        rendered_text = pattern.sub(lambda _match: replacement, rendered_text)
     return rendered_text
 
 
@@ -235,9 +237,7 @@ def table_to_latex(block: dict) -> str:
     body = []
     for index, row in enumerate(rows):
         padded = row + [""] * (col_count - len(row))
-        body.append(
-            "    " + " & ".join(table_cell_to_latex(cell) for cell in padded) + r" \\"
-        )
+        body.append("    " + " & ".join(table_cell_to_latex(cell) for cell in padded) + r" \\")
         if index == 0 and len(rows) > 1:
             body.append(r"    \midrule")
 
@@ -282,7 +282,7 @@ def block_to_latex(block: dict) -> str:
     role = block.get("semantic_role") or block.get("candidate_type")
     level = int(block.get("level") or 0)
     if block.get("source_type") == "image":
-        path = block.get("asset_output") or block.get("target_slot") or ""
+        path = block.get("asset_output") or ""
         caption = block.get("caption") or block.get("summary") or ""
         label = latex_label_value(block.get("label") or block.get("latex_label"))
         caption_lines = [f"  \\caption{{{latex_escape(caption)}}}"]
@@ -353,6 +353,24 @@ def render(root: Path, thesis_path: Path, allow_incomplete: bool) -> dict:
         dict: 渲染结果；存在未确认源块时可返回 blocked。
     """
     thesis = read_json(thesis_path)
+    if not isinstance(thesis, dict):
+        return {
+            "flow": "B",
+            "step": "render_chapters",
+            "status": "blocked",
+            "gate": "thesis_json_structure",
+            "issues": [{"check": "thesis_json_type", "detail": "thesis.json 必须是 JSON 对象。"}],
+        }
+    schema_issues = ledger_schema_issues(thesis)
+    if schema_issues:
+        return {
+            "flow": "B",
+            "step": "render_chapters",
+            "status": "blocked",
+            "gate": "thesis_json_structure",
+            "issues": schema_issues,
+            "next_steps": ["修复账本结构后再渲染章节，避免覆盖或错写正文。"],
+        }
     blocks_by_id = {block["id"]: block for block in thesis.get("source_blocks", [])}
     chapters = grouped_chapters(thesis)
     blocking = [
@@ -373,7 +391,16 @@ def render(root: Path, thesis_path: Path, allow_incomplete: bool) -> dict:
     for chapter in chapters:
         for block_id in chapter.get("block_ids", []):
             block = blocks_by_id.get(block_id)
-            status = block.get("status") if block else "missing"
+            if block is None:
+                invalid_structure_blocks.append(
+                    {
+                        "block_id": block_id,
+                        "status": "missing",
+                        "chapter": chapter.get("file"),
+                    }
+                )
+                continue
+            status = block.get("status")
             if status not in RENDERABLE_BLOCK_STATES:
                 invalid_structure_blocks.append(
                     {
@@ -382,18 +409,37 @@ def render(root: Path, thesis_path: Path, allow_incomplete: bool) -> dict:
                         "chapter": chapter.get("file"),
                     }
                 )
+                continue
+            if block.get("source_type") == "image" and not block.get("latex"):
+                asset_output = block.get("asset_output")
+                asset_problem = None
+                if block.get("asset_status") != "exported" or not isinstance(asset_output, str):
+                    asset_problem = "图片源块尚未完成资源导出。"
+                else:
+                    try:
+                        asset_path = safe_resolve_under(root, asset_output, "Images")
+                    except ValueError:
+                        asset_problem = "图片资源路径不在 Images 目录内。"
+                    else:
+                        if not asset_path.exists() or not asset_path.is_file():
+                            asset_problem = "图片资源文件不存在。"
+                if asset_problem:
+                    invalid_structure_blocks.append(
+                        {
+                            "block_id": block_id,
+                            "status": "image_asset_invalid",
+                            "chapter": chapter.get("file"),
+                            "detail": asset_problem,
+                        }
+                    )
     if invalid_structure_blocks:
         return {
             "flow": "B",
             "step": "render_chapters",
             "status": "blocked",
-            "blocking_blocks": [
-                issue["block_id"] for issue in invalid_structure_blocks
-            ],
+            "blocking_blocks": [issue["block_id"] for issue in invalid_structure_blocks],
             "invalid_structure_blocks": invalid_structure_blocks,
-            "next_steps": [
-                "章节结构引用了不可渲染源块，先回到流程 B 修正结构或源块状态。"
-            ],
+            "next_steps": ["章节结构引用了不可渲染源块，先回到流程 B 修正结构或源块状态。"],
         }
 
     rendered_files = []

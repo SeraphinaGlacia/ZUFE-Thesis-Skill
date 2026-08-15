@@ -9,14 +9,17 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from check_flow_b_gate import check as check_flow_b_gate
 from common import (
+    active_chapter_files,
     latex_label_reference_issues,
+    load_metadata_yaml,
     manual_cross_reference_hits,
+    metadata_value,
     print_json,
     read_json,
     write_json,
 )
-
 
 PLACEHOLDER_PATTERNS = [
     r"xxxxxxxxxxxx",
@@ -27,17 +30,25 @@ PLACEHOLDER_PATTERNS = [
 ]
 
 KEY_SIGNALS = {
+    "table_of_contents": r"目\s*录|Contents",
     "abstract_cn": r"摘\s*要",
     "abstract_en": r"Abstract",
     "references": r"参考文献|References",
 }
 
-BIB_ENTRY_RE = re.compile(r"@\w+\s*\{\s*([^,\s]+)", flags=re.IGNORECASE)
+SERIOUS_LOG_RE = re.compile(
+    r"^!\s|Emergency stop|Fatal error occurred|No pages of output|"
+    r"There were undefined references",
+    flags=re.IGNORECASE | re.MULTILINE,
+)
+
+BIB_ENTRY_RE = re.compile(r"@\w+\s*[\{(]\s*([^,\s]+)", flags=re.IGNORECASE)
 CITE_RE = re.compile(
     r"\\(?:cite|supercite|parencite|textcite|autocite|citep|citet)"
     r"(?:\s*\[[^\]]*\]){0,2}\s*\{([^}]+)\}",
     flags=re.IGNORECASE,
 )
+QA_TOOL_TIMEOUT_SECONDS = 30
 
 
 def extract_text_with_pdftotext(pdf: Path) -> str:
@@ -51,12 +62,16 @@ def extract_text_with_pdftotext(pdf: Path) -> str:
     """
     if shutil.which("pdftotext") is None:
         return ""
-    process = subprocess.run(
-        ["pdftotext", str(pdf), "-"],
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-    )
+    try:
+        process = subprocess.run(
+            ["pdftotext", str(pdf), "-"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=QA_TOOL_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
     return process.stdout or ""
 
 
@@ -71,12 +86,16 @@ def count_pdf_pages_with_pdfinfo(pdf: Path) -> int:
     """
     if shutil.which("pdfinfo") is None:
         return 0
-    process = subprocess.run(
-        ["pdfinfo", str(pdf)],
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-    )
+    try:
+        process = subprocess.run(
+            ["pdfinfo", str(pdf)],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=QA_TOOL_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return 0
     if process.returncode != 0:
         return 0
     match = re.search(r"^Pages:\s*(\d+)\s*$", process.stdout or "", re.MULTILINE)
@@ -113,7 +132,23 @@ def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
 
 
-def rendered_source_text(root: Path) -> str:
+def read_json_object(path: Path) -> dict:
+    """读取 JSON 对象，缺失或损坏时返回空对象供 QA 生成失败项。
+
+    Args:
+        path (Path): JSON 文件路径。
+
+    Returns:
+        dict: JSON 顶层对象；无法读取或类型不符时为空对象。
+    """
+    try:
+        data = read_json(path, default={})
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def rendered_source_text(root: Path, thesis: dict | None = None) -> str:
     """读取生成章节源码用于源码级 QA。
 
     Args:
@@ -122,12 +157,71 @@ def rendered_source_text(root: Path) -> str:
     Returns:
         str: 拼接后的章节源码文本。
     """
-    source_files = (
-        sorted((root / "chapters").glob("*.tex"))
-        if (root / "chapters").exists()
-        else []
-    )
-    return "\n".join(read_text(path) for path in source_files)
+    return "\n".join(read_text(path) for path in active_chapter_files(root, thesis))
+
+
+def build_log_text(root: Path) -> str:
+    """读取主日志和固定编译链日志。
+
+    Args:
+        root (Path): ZUFE-Thesis 模板根目录。
+        thesis (dict | None): 当前账本；未提供时读取标准路径。
+
+    Returns:
+        str: 合并后的构建日志。
+    """
+    paths = [root / "main.log", root / "main.blg"]
+    output_dir = root / "workspace/output"
+    if output_dir.exists():
+        step_logs = sorted(output_dir.glob("build-step-*.log"))
+        paths.extend(step_logs[-1:])
+    return "\n".join(read_text(path) for path in paths if path.exists())
+
+
+def body_signal(thesis: dict, pdf_text: str) -> tuple[bool, str]:
+    """从已确认章节标题或正文源块验证 PDF 正文信号。
+
+    Args:
+        thesis (dict): ``thesis.json`` 数据。
+        pdf_text (str): 从本轮 PDF 抽取的文本。
+
+    Returns:
+        tuple[bool, str]: 是否命中以及采用的证据说明。
+    """
+    normalized_pdf = re.sub(r"\s+", "", pdf_text).casefold()
+    candidates = []
+    structure = thesis.get("structure", {})
+    chapters = structure.get("chapters", []) if isinstance(structure, dict) else []
+    chapters = chapters if isinstance(chapters, list) else []
+    for chapter in chapters:
+        if not isinstance(chapter, dict):
+            continue
+        title = str(chapter.get("title") or "").strip()
+        if title:
+            candidates.append(("chapter_title", title))
+    if not candidates:
+        source_blocks = thesis.get("source_blocks", [])
+        source_blocks = source_blocks if isinstance(source_blocks, list) else []
+        for block in source_blocks:
+            if not isinstance(block, dict):
+                continue
+            target = str(block.get("target_slot") or "")
+            text = str(block.get("text") or "").strip()
+            if (
+                block.get("status") == "rendered"
+                and target.startswith("chapters/")
+                and target not in {"chapters/basicinfo.tex", "chapters/mainbody.tex"}
+                and len(re.sub(r"\s+", "", text)) >= 6
+            ):
+                candidates.append(("rendered_source_block", text[:80]))
+                break
+    for source, candidate in candidates:
+        normalized_candidate = re.sub(r"\s+", "", candidate).casefold()
+        if normalized_candidate and normalized_candidate in normalized_pdf:
+            return True, f"matched {source}: {candidate[:80]}"
+    if candidates:
+        return False, f"none of {len(candidates)} audited body candidate(s) found"
+    return False, "thesis.json contains no audited chapter title or rendered body block"
 
 
 def count_runs_with_flag(thesis: dict, flag: str) -> int:
@@ -141,8 +235,15 @@ def count_runs_with_flag(thesis: dict, flag: str) -> int:
         int: 带该标记的 run 数量。
     """
     count = 0
-    for block in thesis.get("source_blocks", []):
-        count += sum(1 for run in block.get("runs", []) if run.get(flag))
+    source_blocks = thesis.get("source_blocks", [])
+    source_blocks = source_blocks if isinstance(source_blocks, list) else []
+    for block in source_blocks:
+        if not isinstance(block, dict):
+            continue
+        runs = block.get("runs", [])
+        if not isinstance(runs, list):
+            continue
+        count += sum(1 for run in runs if isinstance(run, dict) and run.get(flag))
     return count
 
 
@@ -261,18 +362,20 @@ def bibtex_quality_checks(root: Path, source_text: str) -> list[dict]:
     return checks
 
 
-def source_quality_checks(root: Path) -> list[dict]:
+def source_quality_checks(root: Path, thesis: dict | None = None) -> list[dict]:
     """执行章节源码级 QA。
 
     Args:
         root (Path): ZUFE-Thesis 模板根目录。
+        thesis (dict | None): 当前账本；未提供时读取标准路径。
 
     Returns:
         list[dict]: 源码级 QA 检查项列表。
     """
     checks = []
-    source_text = rendered_source_text(root)
-    thesis = read_json(root / "workspace/intermediate/thesis.json", default={})
+    source_text = rendered_source_text(root, thesis)
+    if thesis is None:
+        thesis = read_json_object(root / "workspace/intermediate/thesis.json")
 
     resize_hits = re.findall(
         r"\\resizebox\s*\{\s*\\textwidth\s*\}\s*\{\s*!\s*\}",
@@ -334,8 +437,7 @@ def source_quality_checks(root: Path) -> list[dict]:
             "name": "source_subscript_runs_rendered",
             "status": "warning" if rendered_subscripts < subscript_runs else "passed",
             "detail": (
-                f"{subscript_runs} subscript run(s); "
-                f"{rendered_subscripts} rendered marker(s)."
+                f"{subscript_runs} subscript run(s); {rendered_subscripts} rendered marker(s)."
             ),
         }
     )
@@ -355,17 +457,88 @@ def qa(root: Path) -> dict:
     output_dir = root / "workspace/output"
     output_dir.mkdir(parents=True, exist_ok=True)
     build_result_path = output_dir / "build_result.json"
-    build_result = read_json(build_result_path, default={})
+    thesis_path = root / "workspace/intermediate/thesis.json"
+    build_result = read_json_object(build_result_path)
+    thesis = read_json_object(thesis_path)
+    metadata = load_metadata_yaml(root / "workspace/input/metadata.yaml")
+    thesis_metadata = thesis.get("metadata", {})
+    thesis_metadata = thesis_metadata if isinstance(thesis_metadata, dict) else {}
+    english_content_decision = metadata_value(
+        metadata,
+        "english_content_decision",
+        default=str(thesis_metadata.get("english_content_decision") or ""),
+    ).lower()
     pdf = root / "main.pdf"
     checks = []
+
+    flow_b_result = check_flow_b_gate(root, thesis_path)
+    flow_b_passed = flow_b_result.get("status") == "passed"
+    checks.append(
+        {
+            "name": "flow_b_gate_current",
+            "status": "passed" if flow_b_passed else "failed",
+            "detail": (
+                "当前 thesis.json 通过流程 B 门禁。"
+                if flow_b_passed
+                else "当前 thesis.json 未通过流程 B 门禁。"
+            ),
+        }
+    )
+    recorded_gate = build_result.get("flow_b_gate", {})
+    recorded_gate = recorded_gate if isinstance(recorded_gate, dict) else {}
+    gate_binding_passed = (
+        flow_b_passed
+        and recorded_gate.get("status") == "passed"
+        and recorded_gate.get("thesis_json_fingerprint")
+        == flow_b_result.get("thesis_json_fingerprint")
+        and recorded_gate.get("source_docx_fingerprint")
+        == flow_b_result.get("source_docx_fingerprint")
+    )
+    checks.append(
+        {
+            "name": "build_flow_b_binding",
+            "status": "passed" if gate_binding_passed else "failed",
+            "detail": (
+                "构建结果与当前 thesis.json 和源 DOCX 指纹一致。"
+                if gate_binding_passed
+                else "构建结果未记录通过的流程 B 门禁，或输入已在构建后变化。"
+            ),
+        }
+    )
+
+    build_report = output_dir / "report.md"
+    checks.append(
+        {
+            "name": "build_report_exists",
+            "status": "passed" if build_report.exists() else "failed",
+            "detail": "workspace/output/report.md 存在。"
+            if build_report.exists()
+            else "workspace/output/report.md 缺失；必须先运行 build.py。",
+        }
+    )
+    build_passed = build_result.get("status") == "passed"
+    build_steps = build_result.get("steps")
+    steps_passed = (
+        isinstance(build_steps, list)
+        and len(build_steps) == 4
+        and all(step.get("exit_code") == 0 for step in build_steps if isinstance(step, dict))
+        and all(isinstance(step, dict) for step in build_steps)
+    )
+    checks.append(
+        {
+            "name": "build_chain_passed",
+            "status": "passed" if build_passed and steps_passed else "failed",
+            "detail": (
+                "build_result.json 记录固定四步编译链全部通过。"
+                if build_passed and steps_passed
+                else "build_result.json 缺失、状态未通过或四步编译记录不完整。"
+            ),
+        }
+    )
     if pdf.exists():
-        checks.append(
-            {"name": "pdf_exists", "status": "passed", "detail": "main.pdf 存在。"}
-        )
+        checks.append({"name": "pdf_exists", "status": "passed", "detail": "main.pdf 存在。"})
     else:
-        checks.append(
-            {"name": "pdf_exists", "status": "failed", "detail": "main.pdf 缺失。"}
-        )
+        checks.append({"name": "pdf_exists", "status": "failed", "detail": "main.pdf 缺失。"})
 
     new_pdf = bool(build_result.get("new_pdf")) if build_result else False
     freshness_detail = (
@@ -385,8 +558,14 @@ def qa(root: Path) -> dict:
     checks.append(
         {
             "name": "page_count",
-            "status": "passed" if page_count > 0 else "failed",
-            "detail": str(page_count),
+            "status": "passed" if page_count > 0 else "warning" if pdf.exists() else "failed",
+            "detail": (
+                str(page_count)
+                if page_count > 0
+                else "PDF 存在，但当前工具无法可靠确认页数。"
+                if pdf.exists()
+                else "PDF 不存在，无法读取页数。"
+            ),
         }
     )
 
@@ -395,23 +574,41 @@ def qa(root: Path) -> dict:
         {
             "name": "pdf_text",
             "status": "passed" if text.strip() else "warning",
-            "detail": "已抽取 PDF 文本。"
-            if text.strip()
-            else "pdftotext 未能抽取 PDF 文本。",
+            "detail": "已抽取 PDF 文本。" if text.strip() else "pdftotext 未能抽取 PDF 文本。",
         }
     )
 
     for name, pattern in KEY_SIGNALS.items():
-        found = re.search(pattern, text) is not None
+        found = re.search(pattern, text, flags=re.IGNORECASE) is not None
+        explicitly_omitted = name == "abstract_en" and english_content_decision == "omit"
         checks.append(
             {
                 "name": f"signal_{name}",
-                "status": "passed" if found else "warning",
-                "detail": f"PDF 文本中{'找到' if found else '未找到'} {pattern!r}。",
+                "status": (
+                    "passed"
+                    if found or explicitly_omitted
+                    else "failed"
+                    if text.strip()
+                    else "warning"
+                ),
+                "detail": (
+                    "用户已明确选择省略英文摘要。"
+                    if explicitly_omitted and not found
+                    else f"PDF 文本中{'找到' if found else '未找到'} {pattern!r}。"
+                ),
             }
         )
 
-    source_text = rendered_source_text(root)
+    body_found, body_detail = body_signal(thesis, text)
+    checks.append(
+        {
+            "name": "signal_body",
+            "status": "passed" if body_found else "failed" if text.strip() else "warning",
+            "detail": body_detail,
+        }
+    )
+
+    source_text = rendered_source_text(root, thesis)
     combined = text + "\n" + source_text
     for pattern in PLACEHOLDER_PATTERNS:
         found = re.search(pattern, combined, flags=re.IGNORECASE) is not None
@@ -423,10 +620,14 @@ def qa(root: Path) -> dict:
             }
         )
 
-    logs = "\n".join(
-        path.read_text(encoding="utf-8", errors="ignore")
-        for path in [root / "main.log", root / "main.blg"]
-        if path.exists()
+    logs = build_log_text(root)
+    serious_error = SERIOUS_LOG_RE.search(logs)
+    checks.append(
+        {
+            "name": "serious_build_errors",
+            "status": "failed" if serious_error else "passed",
+            "detail": serious_error.group(0) if serious_error else "none",
+        }
     )
     unresolved = re.search(
         r"undefined references|Citation .* undefined|"
@@ -441,11 +642,11 @@ def qa(root: Path) -> dict:
             "detail": unresolved.group(0) if unresolved else "none",
         }
     )
-    checks.extend(source_quality_checks(root))
+    checks.extend(source_quality_checks(root, thesis))
 
     failed = [check for check in checks if check["status"] == "failed"]
     warnings = [check for check in checks if check["status"] == "warning"]
-    final_status = "failed" if failed else "needs_review" if warnings else "ready_to_submit"
+    final_status = "failed" if failed else "needs_review" if warnings else "ready_for_manual_review"
     result = {
         "flow": "C",
         "step": "qa",
@@ -453,6 +654,17 @@ def qa(root: Path) -> dict:
         "pdf": "main.pdf" if pdf.exists() else None,
         "page_count": page_count,
         "checks": checks,
+        "manual_review_required": True,
+        "automated_scope": "source_and_pdf_text",
+        "reports": {
+            "build": "workspace/output/report.md",
+            "qa": "workspace/output/qa_report.md",
+        },
+        "next_steps": (
+            ["修复 failed 检查后重新编译并运行 QA。"]
+            if final_status == "failed"
+            else ["人工打开 PDF，检查封面、分页、图表、公式和整体版式后再提交。"]
+        ),
     }
     write_json(output_dir / "qa_result.json", result)
     report = [

@@ -152,7 +152,7 @@ InitFile/schoolLogo.png
 - `pdftotext`：用于流程 C 抽取 PDF 文本并做文本级 QA。
 - `pdfinfo`：用于流程 C 读取 PDF 页数；比扫描原始 PDF 字节更可靠。
 
-缺少 `pdftotext` 或 `pdfinfo` 不阻止 PDF 编译，但会降低 QA 确定性。此时最终状态不得因为 PDF 可生成就自动宣称 `ready_to_submit`，应把文本级或页数级 QA 不完整写入 `qa_report.md`。
+缺少 `pdftotext` 或 `pdfinfo` 不阻止 PDF 编译，但会降低 QA 确定性。此时最终状态必须保持 `needs_review`，并把文本级或页数级 QA 不完整写入 `qa_report.md`。
 
 ## 运用于不同系统的解决问题方案
 
@@ -260,6 +260,31 @@ Windows 优先建议 MiKTeX，因为它对非技术用户更容易处理缺包�
 如果用户选择 TeX Live for Windows，也可以使用完整安装；但安装体积和耗时必须提前说明。
 
 Windows 上 PATH 问题常见。若 `xelatex` 已安装但 `where xelatex` 找不到，应先修 PATH，而不是重复安装 TeX 发行版。
+
+### Linux 与云环境
+
+先确认当前环境是完整主机、容器还是受限云沙箱。不要假设有管理员权限、持久磁盘或图形界面。
+
+最小检查命令：
+
+```bash
+python3 --version
+python3 -c "import docx; print(docx.__version__)"
+command -v xelatex biber kpsewhich
+kpsewhich ctexbook.cls
+kpsewhich biblatex.sty
+kpsewhich gb7714-2015.bbx
+```
+
+处理顺序：
+
+1. 优先使用平台已经提供且版本不低于 3.10 的 Python；后续命令始终使用同一个解释器。
+2. 若缺 TeX 命令，先识别发行版和系统包管理器，再向用户说明安装体积、权限和持久性；不同 Linux 发行版的包名不应靠猜测。
+3. 若 `xelatex`、`biber` 已存在但缺核心文件，再按 `kpsewhich` 结果补具体 TeX 包。
+4. 临时容器或云沙箱无法持久安装时，优先切换到预装 TeX Live 的可信环境，或让用户在本机完整模板工作区运行。
+5. 无图形界面不影响文本级 QA，但最终 PDF 视觉检查必须在能打开 PDF 的环境完成。
+
+`check_env.py` 不能替代云平台权限、磁盘配额、进程时限和网络策略检查。安装命令超时、文件系统只读或进程被平台终止时，应报告平台边界，不要循环重试。
 
 ## 安全边界
 

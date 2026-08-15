@@ -10,6 +10,37 @@ from typing import Any
 
 from common import block_summary, classify_text, now_iso, print_json, write_json
 
+TRANSPARENT_BODY_CONTAINERS = {"sdt", "sdtContent", "customXml", "smartTag"}
+
+
+def local_name(tag: str) -> str:
+    """从 XML QName 中取本地标签名。
+
+    Args:
+        tag (str): XML 标签名。
+
+    Returns:
+        str: 不含命名空间的标签名。
+    """
+    return tag.rsplit("}", 1)[-1]
+
+
+def iter_body_elements(parent: Any):
+    """按正文顺序枚举段落和表格，并展开内容控件等容器。
+
+    Args:
+        parent (Any): Word XML 正文或容器节点。
+
+    Yields:
+        Any: 段落或表格 XML 节点。
+    """
+    for child in parent.iterchildren():
+        tag = local_name(child.tag)
+        if tag in {"p", "tbl"}:
+            yield child
+        elif tag in TRANSPARENT_BODY_CONTAINERS:
+            yield from iter_body_elements(child)
+
 
 def import_docx() -> Any:
     """导入 python-docx，并把缺依赖错误转换为用户可读异常。
@@ -21,7 +52,7 @@ def import_docx() -> Any:
         RuntimeError: 当前 Python 环境无法导入 ``python-docx`` 时抛出。
     """
     try:
-        import docx  # type: ignore
+        import docx
     except Exception as exc:
         raise RuntimeError(f"python-docx 不可用：{exc}") from exc
     return docx
@@ -215,9 +246,21 @@ def prescan(root: Path, docx_path: Path) -> dict:
             "next_steps": ["请用户提供未加密、未损坏、可打开的 .docx 文件。"],
         }
 
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
+
+    body_paragraphs = []
+    body_tables = []
+    for element in iter_body_elements(document.element.body):
+        if local_name(element.tag) == "p":
+            body_paragraphs.append(Paragraph(element, document))
+        else:
+            body_tables.append(Table(element, document))
+    body_table_lines = table_text_lines(body_tables)
+
     paragraphs = []
     non_empty_lines = []
-    for index, paragraph in enumerate(document.paragraphs, start=1):
+    for index, paragraph in enumerate(body_paragraphs, start=1):
         text = paragraph.text.strip()
         candidate_type, confidence = classify_text(
             text,
@@ -237,22 +280,22 @@ def prescan(root: Path, docx_path: Path) -> dict:
     result = {
         "flow": "A",
         "gate": "word_prescan",
-        "status": "passed" if non_empty_lines else "blocked",
+        "status": "passed" if non_empty_lines or body_table_lines else "blocked",
         "docx": str(docx_path),
         "created_at": now_iso(),
         "counts": {
-            "paragraphs": len(document.paragraphs),
+            "paragraphs": len(body_paragraphs),
             "non_empty_paragraphs": len(non_empty_lines),
-            "tables": len(document.tables),
+            "tables": len(body_tables),
         },
         "metadata_candidates": metadata_candidates(
-            non_empty_lines + table_text_lines(document.tables),
-            document.tables,
+            non_empty_lines + body_table_lines,
+            body_tables,
         ),
         "structure_preview": paragraphs[:80],
         "next_steps": (
             []
-            if non_empty_lines
+            if non_empty_lines or body_table_lines
             else ["DOCX 没有可读文本，请用户重新另存为 DOCX 或更换文件。"]
         ),
     }
