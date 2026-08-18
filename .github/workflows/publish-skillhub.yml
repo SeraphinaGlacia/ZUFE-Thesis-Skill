@@ -1,0 +1,236 @@
+name: Publish Skill to SkillHub
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Published release tag to validate; leave empty for latest
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: skillhub-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Validate and publish release
+    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out publishing automation
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: automation
+
+      - name: Resolve published release
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" == "release" ]]; then
+            tag="$EVENT_TAG"
+          elif [[ -n "$INPUT_TAG" ]]; then
+            tag="$INPUT_TAG"
+          else
+            tag="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq '.tagName')"
+          fi
+
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tag must be v-prefixed SemVer: $tag" >&2
+            exit 1
+          fi
+
+          release_json="$(gh release view "$tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,isPrerelease,tagName)"
+          if [[ "$(jq -r '.isDraft' <<< "$release_json")" != "false" ]]; then
+            echo "Release is still a draft: $tag" >&2
+            exit 1
+          fi
+          if [[ "$(jq -r '.isPrerelease' <<< "$release_json")" != "false" ]]; then
+            echo "Prereleases are not published to SkillHub: $tag" >&2
+            exit 1
+          fi
+
+          version="${tag#v}"
+          asset_name="zufe-thesis-typesetter-${tag}.zip"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "asset_name=$asset_name" >> "$GITHUB_OUTPUT"
+
+      - name: Check out release source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+          path: source
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.11.21"
+          enable-cache: true
+          cache-dependency-glob: source/uv.lock
+
+      - name: Test release source
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync --locked
+          uv run ruff check zufe-thesis-typesetter
+          uv run ty check
+          uv run pytest
+
+      - name: Download published ZIP
+        env:
+          ASSET_NAME: ${{ steps.release.outputs.asset_name }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+
+          downloaded=false
+          for attempt in {1..6}; do
+            if gh release download "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern "$ASSET_NAME" \
+              --dir release \
+              --clobber; then
+              downloaded=true
+              break
+            fi
+
+            echo "Release asset is not available yet; retrying in 10 seconds (${attempt}/6)."
+            sleep 10
+          done
+
+          if [[ "$downloaded" != "true" || ! -f "release/$ASSET_NAME" ]]; then
+            echo "Expected release asset was not found: $ASSET_NAME" >&2
+            exit 1
+          fi
+
+          unzip -t "release/$ASSET_NAME"
+          mkdir -p release-unpacked
+          unzip -q "release/$ASSET_NAME" -d release-unpacked
+          test -f release-unpacked/zufe-thesis-typesetter/SKILL.md
+
+      - name: Verify release asset contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          diff --brief --recursive \
+            source/zufe-thesis-typesetter \
+            release-unpacked/zufe-thesis-typesetter
+
+      - name: Prepare SkillHub package
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 automation/.github/scripts/prepare_skillhub_package.py \
+            release-unpacked/zufe-thesis-typesetter \
+            skillhub-package/zufe-thesis-typesetter \
+            --version "$RELEASE_VERSION" \
+            --license AGPL-3.0-only \
+            --homepage "https://github.com/$GITHUB_REPOSITORY" \
+            --tag latex \
+            --tag docx \
+            --tag zufe \
+            --tag 论文排版 \
+            --tag 毕业论文 \
+            --report skillhub-package-report.json
+
+      - name: Install pinned SkillHub CLI
+        env:
+          CLI_ARCHIVE_SHA256: 3bbe2ba15ada2eb7a94a2b760fead83be5f4164ab28a6c8b0944dbc539f7e236
+          CLI_ARCHIVE_URL: https://skillhub-1388575217.cos.ap-guangzhou.myqcloud.com/install/skillhub-cli-2026.8.5.tar.gz
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p skillhub-cli
+          curl --fail --location --silent --show-error \
+            --output skillhub-cli.tar.gz \
+            "$CLI_ARCHIVE_URL"
+          echo "$CLI_ARCHIVE_SHA256  skillhub-cli.tar.gz" | sha256sum --check --strict
+          tar -xzf skillhub-cli.tar.gz -C skillhub-cli
+          test -f skillhub-cli/cli/skills_store_cli.py
+
+      - name: Run SkillHub dry-run
+        env:
+          SKILLHUB_SKIP_SELF_UPGRADE: "1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 skillhub-cli/cli/skills_store_cli.py \
+            --skip-self-upgrade \
+            publish skillhub-package/zufe-thesis-typesetter \
+            --host https://api.skillhub.cn \
+            --dry-run \
+            --json | tee skillhub-dry-run.json
+
+      - name: Publish release to SkillHub
+        if: github.event_name == 'release'
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          SKILLHUB_SKIP_SELF_UPGRADE: "1"
+          SKILLHUB_TOKEN: ${{ secrets.SKILLHUB_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$SKILLHUB_TOKEN" ]]; then
+            echo "Repository secret SKILLHUB_API_KEY is not configured." >&2
+            exit 1
+          fi
+
+          python3 skillhub-cli/cli/skills_store_cli.py \
+            --skip-self-upgrade \
+            publish skillhub-package/zufe-thesis-typesetter \
+            --host https://api.skillhub.cn \
+            --changelog "GitHub Release $RELEASE_TAG" \
+            --json > skillhub-publish-result.json
+
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          result = json.loads(Path("skillhub-publish-result.json").read_text(encoding="utf-8"))
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as summary:
+              summary.write("### SkillHub publication\n\n")
+              summary.write(f"- Release: `{os.environ['RELEASE_TAG']}`\n")
+              summary.write(f"- Skill ID: `{result.get('skillId', 'unknown')}`\n")
+              summary.write(f"- Status: `{result.get('status', 'unknown')}`\n")
+              if result.get("publicUrl"):
+                  summary.write(f"- URL: {result['publicUrl']}\n")
+          PY
+
+      - name: Summarize manual validation
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          {
+            echo "### SkillHub dry-run"
+            echo ""
+            echo "- Release: \`$RELEASE_TAG\`"
+            echo "- Result: package and metadata validation passed"
+            echo "- Publication: skipped for manual runs"
+          } >> "$GITHUB_STEP_SUMMARY"
