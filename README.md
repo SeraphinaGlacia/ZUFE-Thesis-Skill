@@ -89,12 +89,44 @@
 > [!CAUTION]
 > 使用前请务必先备份原始 Word 等重要文件；任何因使用本 Skill 导致的文档损坏、内容丢失或数据丢失，均不由本项目承担责任。
 
+### 5.1 非技术用户：复制这段 Prompt 开始
+
+本 Skill 需要在能够直接读写本地工作区、执行本地命令并安装 Skill 的桌面 Agent 中运行。普通网页对话或只能上传附件的模式不适合。可以使用 Codex Desktop、Kimi 桌面客户端的 `Work` 模式、WorkBuddy Desktop，或豆包电脑版的“办公任务模式”等；不同版本的功能和权限可能变化，最终以客户端实际能否访问本地文件和运行命令为准。
+
+非技术用户可以把下面整段 Prompt 直接发送给桌面 Agent：
+
+```text
+我想使用 ZUFE-Thesis-Skill，把已经写好的 Word 论文转换为 ZUFE-Thesis LaTeX 工程和 PDF。请把这件事作为本地工作流处理，并一步一步引导我完成。
+
+开始前，请先确认你当前具备以下能力：
+
+1. 可以读写我授权的本地文件夹。
+2. 可以执行本地终端命令。
+3. 可以安装并调用第三方 Agent Skill。
+
+如果任一能力不可用，请不要假装已经安装或继续转换；请直接告诉我当前缺少什么能力。
+
+确认能力满足后，请按下面的顺序进行：
+
+1. 先帮我准备或定位一个完整的 ZUFE-Thesis 模板项目。优先使用 https://gitee.com/cwf818/ZUFE-Thesis。不要把 Skill 仓库误当成 LaTeX 模板。
+2. 以全局级安装当前 Agent Skill https://github.com/SeraphinaGlacia/ZUFE-Thesis-Skill。优先尝试运行：`npx skills add SeraphinaGlacia/ZUFE-Thesis-Skill`
+3. 如果当前客户端不支持 npx 安装，改为从 https://zufe-thesis-skill.glacia.fun/zufe-thesis-typesetter-latest.zip 获取最新 ZIP，并使用客户端支持的本地 Skill 导入方式进行全局安装。如果这些方式都不可用，请说明具体阻碍并让我提供 ZIP，不要自行编造或重写这个 Skill。
+4. 安装后，确认客户端能够识别 zufe-thesis-typesetter，并读取其中的 SKILL.md；同时确认当前工作目录确实是完整的 ZUFE-Thesis 模板根目录。
+5. 接着告诉我应该把 .docx 文件放在哪里，并按 Skill 规定的流程检查模板、环境和输入，再进行转换、编译和质量检查。
+
+现在请开始任务！
+```
+
+### 5.2 手动安装
+
+专业用户可以继续按照下面的步骤手动安装：
+
 1. 先准备一个完整的 ZUFE-Thesis 模板项目。
 
    - 模板优先使用 GitHub 仓库：[ZUFE-Thesis](https://github.com/sqsssq/ZUFE-Thesis)。
    - 如果 GitHub 因网络环境不可用，可以改用国内备用链接：[Gitee 镜像](https://gitee.com/cwf818/ZUFE-Thesis)。
 
-2. 在 Kimi Work / Codex 等工具中打开这个完整的 ZUFE-Thesis 模板项目。
+2. 在 Kimi Work / Codex Desktop 等工具中打开这个完整的 ZUFE-Thesis 模板项目。
 
 3. 然后，在目标工作区安装本 Skill：
 
@@ -121,7 +153,7 @@ Agent 会按流程检查模板、环境、输入文件和元数据，并开始�
 
 ## 六、经典案例 & 结果展示
 
-> 本部分等待补充...
+> 面向非技术用户的一段式启动 Prompt 已放在“快速开始”中；完整案例与结果展示将在获得合适素材后补充。
 
 ## 七、如何保证可靠？
 

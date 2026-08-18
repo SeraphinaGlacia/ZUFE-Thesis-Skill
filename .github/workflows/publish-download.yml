@@ -84,6 +84,7 @@ jobs:
       - name: Build static download endpoint
         env:
           ASSET_NAME: ${{ steps.release.outputs.asset_name }}
+          DOWNLOAD_NAME: zufe-thesis-typesetter-latest.zip
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         shell: bash
         run: |
@@ -94,18 +95,19 @@ jobs:
             cp -a site/. _site/
           fi
 
-          cp "release/$ASSET_NAME" _site/download
+          cp "release/$ASSET_NAME" "_site/$DOWNLOAD_NAME"
           touch _site/.nojekyll
 
-          cmp --silent "release/$ASSET_NAME" _site/download
-          unzip -t _site/download
+          cmp --silent "release/$ASSET_NAME" "_site/$DOWNLOAD_NAME"
+          unzip -t "_site/$DOWNLOAD_NAME"
 
-          checksum="$(sha256sum _site/download | cut -d ' ' -f 1)"
+          checksum="$(sha256sum "_site/$DOWNLOAD_NAME" | cut -d ' ' -f 1)"
           {
             echo "### Published download endpoint"
             echo ""
             echo "- Release: \`$RELEASE_TAG\`"
             echo "- Asset: \`$ASSET_NAME\`"
+            echo "- Endpoint: \`/$DOWNLOAD_NAME\`"
             echo "- SHA-256: \`$checksum\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
