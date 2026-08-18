@@ -94,6 +94,7 @@ jobs:
           uv run ruff check zufe-thesis-typesetter
           uv run ty check
           uv run pytest
+          find zufe-thesis-typesetter -type d -name __pycache__ -prune -exec rm -rf {} +
 
       - name: Download published ZIP
         env:
