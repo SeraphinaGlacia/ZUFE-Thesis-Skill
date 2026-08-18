@@ -1,7 +1,5 @@
 interface:
-  display_name: "ZUFE 论文排版助手"
-  short_description: "按 ZUFE 规范完成论文的排版与格式检查"
+  display_name: "浙江财经大学论文排版助手"
+  short_description: "按浙江财经大学论文写作规范完成论文的排版与格式检查"
   default_prompt: "使用 $zufe-thesis-typesetter 将我的 Word 论文转换为经过检查的 ZUFE-Thesis LaTeX/PDF 工程。"
-  icon_small: "./assets/icon-small.png"
-  icon_large: "./assets/icon-large.png"
   brand_color: "#3B82F6"
