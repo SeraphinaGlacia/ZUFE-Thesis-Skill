@@ -59,11 +59,11 @@ workspace/output/qa_report.md
 
 ## 脚本使用
 
-所有脚本接受 `--root`，并输出 JSON 或写入 JSON 报告。高数据量命令的 stdout 只给有界摘要和完整报告路径；Agent 先读摘要，只在需要具体证据时分页查询或读取报告。正常执行优先使用已文档化的 CLI，只有调试或维护脚本时才读取源码。
+所有可执行脚本接受 `--root`，并输出 JSON 或写入 JSON 报告。先以当前已加载的 `SKILL.md` 所在目录作为 Skill 根目录，从该目录解析 `scripts/`，再把完整的 ZUFE-Thesis 模板根目录传给 `--root`；不要假定 Skill 文件夹位于模板工作区内。高数据量命令的 stdout 只给有界摘要和完整报告路径；Agent 先读摘要，只在需要具体证据时分页查询或读取报告。正常执行优先使用已文档化的 CLI，只有调试或维护脚本时才读取源码。
 
 - `scripts/check_template.py`：检查 ZUFE-Thesis 模板签名。
 - `scripts/prepare_workspace.py`：创建 `workspace/`，把 DOCX 放到标准路径，并可在用户批准后归档旧输出。
-- `scripts/check_env.py`：按 profile 检查 Python、`python-docx`、`xelatex`、`biber`、模板关键 TeX 包和 QA 工具；它不替代模板签名或 DOCX 可读性检查。
+- `scripts/check_env.py`：按 `--stage` 检查 Python、`python-docx`、`xelatex`、`biber`、模板关键 TeX 包和 QA 工具；它不替代模板签名或 DOCX 可读性检查。
 - `scripts/prescan_docx.py`：流程 A 的 DOCX 轻量预扫描和 metadata 候选提取。不得生成正式 `thesis.json`。
 - `scripts/import_docx.py`：流程 B 正式抽取，生成 `thesis.json` 和 `extracted.md`。
 - `scripts/ledger.py`：只读汇总、分页查询源块并生成带前后文的标题候选大纲；不得用它绕过 Agent 的语义判断。
@@ -108,7 +108,6 @@ Agent 负责语义判断，脚本不得替代：
 - **标题层级误判**：Agent 必须先按源顺序查看全部标题候选及其前后文，再统一确认 `semantic_role=heading`、`level=1/2/3` 和 `render_title`。标题块只有编号、正文位于相邻块时必须先确认是否合并。
 - **图片题注误填**：图片媒体路径和源块摘要不得自动充当图题；`caption` 只能来自 Word 证据或 Agent/用户确认。
 - **引用类型误判**：`reference_rewrites` 必须显式写入 `target_kind` 或 `prefix`；类型缺失时不得默认按图片引用生成 `图~\ref{...}`。
-- 后续真实测试中发现的可复现问题，应同时增加回归测试，并在本节补充一条会改变 Agent 决策的短规则；实现细节放入对应 reference，避免把本文件扩展成故障日志。
 
 ## 详细参考
 

@@ -75,13 +75,13 @@ workspace/input/metadata.yaml
 优先使用只读账本命令获取所需证据，避免为了一个局部判断加载整个 `thesis.json`：
 
 ```text
-python zufe-thesis-typesetter/scripts/ledger.py --root . summary
-python zufe-thesis-typesetter/scripts/ledger.py --root . pending --offset 0 --limit 20
-python zufe-thesis-typesetter/scripts/ledger.py --root . get p0001
-python zufe-thesis-typesetter/scripts/ledger.py --root . outline --offset 0 --limit 20
+python "<skill-root>/scripts/ledger.py" --root . summary
+python "<skill-root>/scripts/ledger.py" --root . pending --offset 0 --limit 20
+python "<skill-root>/scripts/ledger.py" --root . get p0001
+python "<skill-root>/scripts/ledger.py" --root . outline --offset 0 --limit 20
 ```
 
-`summary` 用于总体状态，`pending` 用于分页处理，`get` 只展开一个源块，`outline` 把标题候选、Word 证据和相邻源块放在一起。只有这些有界结果不足以完成跨块判断时，才读取完整账本。
+`<skill-root>` 表示当前已加载的 `SKILL.md` 所在目录，不要求 Skill 安装在模板工作区中。`summary` 用于总体状态，`pending` 用于分页处理，`get` 只展开一个源块，`outline` 把标题候选、Word 证据和相邻源块放在一起。只有这些有界结果不足以完成跨块判断时，才读取完整账本。
 
 ## 标题的混合语义识别
 

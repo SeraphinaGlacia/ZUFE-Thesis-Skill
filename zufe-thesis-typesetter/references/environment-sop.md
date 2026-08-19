@@ -20,10 +20,12 @@
 
 | Profile | 命令 | 作用 | 阻塞策略 |
 | --- | --- | --- | --- |
-| `minimal` | `python zufe-thesis-typesetter/scripts/check_env.py --root . --stage minimal` | 检查读取 Word 所需的 Python 与 `python-docx` | 失败则不能预扫描 DOCX |
-| `latex` | `python zufe-thesis-typesetter/scripts/check_env.py --root . --stage latex` | 检查 PDF 编译所需的 `xelatex`、`biber` 和核心 TeX 文件 | 失败则不能进入编译 |
-| `qa` | `python zufe-thesis-typesetter/scripts/check_env.py --root . --stage qa` | 检查 `pdfinfo`、`pdftotext` 等 QA 增强工具 | 缺失不阻塞编译，只记录 QA 降级 |
-| `all` | `python zufe-thesis-typesetter/scripts/check_env.py --root . --stage all` | 汇总以上运行依赖；适合最终复查，不替代其他流程 A 门禁 | 任一必需层失败则阻塞 |
+| `minimal` | `python "<skill-root>/scripts/check_env.py" --root . --stage minimal` | 检查读取 Word 所需的 Python 与 `python-docx` | 失败则不能预扫描 DOCX |
+| `latex` | `python "<skill-root>/scripts/check_env.py" --root . --stage latex` | 检查 PDF 编译所需的 `xelatex`、`biber` 和核心 TeX 文件 | 失败则不能进入编译 |
+| `qa` | `python "<skill-root>/scripts/check_env.py" --root . --stage qa` | 检查 `pdfinfo`、`pdftotext` 等 QA 增强工具 | 缺失不阻塞编译，只记录 QA 降级 |
+| `all` | `python "<skill-root>/scripts/check_env.py" --root . --stage all` | 汇总以上运行依赖；适合最终复查，不替代其他流程 A 门禁 | 任一必需层失败则阻塞 |
+
+`<skill-root>` 表示当前已加载的 `SKILL.md` 所在目录；`.` 表示当前打开的 ZUFE-Thesis 模板根目录。Skill 可以全局或项目级安装，不要把两者当成同一个路径。
 
 ## 流程 A 环境顺序
 
