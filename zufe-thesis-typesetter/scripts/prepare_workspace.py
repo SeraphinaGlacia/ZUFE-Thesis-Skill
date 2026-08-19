@@ -227,12 +227,26 @@ def main() -> int:
     Returns:
         int: 门禁通过时返回 0，否则返回 2。
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default=".")
-    parser.add_argument("--word", type=Path)
-    parser.add_argument("--move-word", action="store_true")
-    parser.add_argument("--copy-word", action="store_true")
-    parser.add_argument("--archive-existing-output", action="store_true")
+    parser = argparse.ArgumentParser(
+        description="创建标准 workspace，并在用户批准后整理 Word 输入和旧输出。"
+    )
+    parser.add_argument("--root", default=".", help="ZUFE-Thesis 模板根目录。")
+    parser.add_argument("--word", type=Path, help="用户提供的 Word 文件路径。")
+    parser.add_argument(
+        "--move-word",
+        action="store_true",
+        help="把 Word 移动到标准输入路径；必须先获得用户批准。",
+    )
+    parser.add_argument(
+        "--copy-word",
+        action="store_true",
+        help="把 Word 复制到标准输入路径；必须先获得用户批准。",
+    )
+    parser.add_argument(
+        "--archive-existing-output",
+        action="store_true",
+        help="归档已有 intermediate/output 产物；必须先获得用户批准。",
+    )
     args = parser.parse_args()
     result = prepare(
         Path(args.root).expanduser().resolve(),

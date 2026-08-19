@@ -26,6 +26,7 @@ QA_TOOLS = {
 
 MINIMUM_PYTHON = (3, 10)
 PYTHON_COMMAND = shlex.quote(sys.executable)
+CHECK_ENV_COMMAND = f"{PYTHON_COMMAND} {shlex.quote(str(Path(__file__).resolve()))}"
 PYTHON_DOCX_INSTALL_HINT = (
     f"先短超时尝试：{PYTHON_COMMAND} -m pip install --timeout 8 --retries 1 python-docx；"
     "若失败、超时或无响应，改用中国大陆镜像："
@@ -64,10 +65,7 @@ def issue(
         "severity": severity,
         "repair_policy": repair_policy,
         "next_action": next_action,
-        "verify_command": (
-            f"{PYTHON_COMMAND} zufe-thesis-typesetter/scripts/check_env.py "
-            f"--root . --stage {verify_stage}"
-        ),
+        "verify_command": (f"{CHECK_ENV_COMMAND} --root . --stage {verify_stage}"),
     }
 
 
@@ -366,9 +364,16 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         int: 环境门禁通过时返回 0，否则返回 2。
     """
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="按阶段检查 ZUFE-Thesis 转换所需的 Python、LaTeX 和 QA 环境。"
+    )
     parser.add_argument("--root", default=".", help="保持接口一致，当前脚本不读取该目录。")
-    parser.add_argument("--stage", choices=["minimal", "latex", "qa", "all"], default="all")
+    parser.add_argument(
+        "--stage",
+        choices=["minimal", "latex", "qa", "all"],
+        default="all",
+        help="要检查的环境阶段，默认 all。",
+    )
     args = parser.parse_args(argv)
     Path(args.root).expanduser().resolve()
     result = check(args.stage)

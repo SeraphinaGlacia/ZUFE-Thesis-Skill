@@ -58,7 +58,9 @@ def main() -> int:
     Returns:
         int: 模板签名完整时返回 0，否则返回 2。
     """
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="检查当前目录是否包含完整的 ZUFE-Thesis 模板签名。"
+    )
     parser.add_argument("--root", default=".", help="ZUFE-Thesis 模板根目录")
     args = parser.parse_args()
     result = check_template(Path(args.root).expanduser().resolve())

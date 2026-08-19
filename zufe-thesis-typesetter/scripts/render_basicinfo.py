@@ -671,10 +671,20 @@ def main() -> int:
     Returns:
         int: 渲染通过时返回 0，否则返回 2。
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default=".")
-    parser.add_argument("--metadata", default="workspace/input/metadata.yaml")
-    parser.add_argument("--thesis-json", default="workspace/intermediate/thesis.json")
+    parser = argparse.ArgumentParser(
+        description="把已确认的 metadata、摘要和关键词渲染到 chapters/basicinfo.tex。"
+    )
+    parser.add_argument("--root", default=".", help="ZUFE-Thesis 模板根目录。")
+    parser.add_argument(
+        "--metadata",
+        default="workspace/input/metadata.yaml",
+        help="相对模板根目录的 metadata 路径。",
+    )
+    parser.add_argument(
+        "--thesis-json",
+        default="workspace/intermediate/thesis.json",
+        help="相对模板根目录的流程 B 账本路径。",
+    )
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
     metadata_path = (

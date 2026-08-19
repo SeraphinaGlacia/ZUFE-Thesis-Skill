@@ -130,10 +130,20 @@ def main() -> int:
     Returns:
         int: 无参考文献确认风险时返回 0，否则返回 2。
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default=".")
-    parser.add_argument("--thesis-json", default="workspace/intermediate/thesis.json")
-    parser.add_argument("--input-bib", default="workspace/input/references.bib")
+    parser = argparse.ArgumentParser(
+        description="在全部参考文献确认后，原子写入模板 Reference.bib。"
+    )
+    parser.add_argument("--root", default=".", help="ZUFE-Thesis 模板根目录。")
+    parser.add_argument(
+        "--thesis-json",
+        default="workspace/intermediate/thesis.json",
+        help="相对模板根目录的流程 B 账本路径。",
+    )
+    parser.add_argument(
+        "--input-bib",
+        default="workspace/input/references.bib",
+        help="相对模板根目录的用户提供 BibTeX 输入路径。",
+    )
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
     thesis_path = (

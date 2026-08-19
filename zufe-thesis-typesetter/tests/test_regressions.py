@@ -984,6 +984,10 @@ def test_check_env_reports_missing_required_latex_packages():
     issues = {issue["code"]: issue for issue in result["issues"]}
     assert issues["tex_core_file_missing"]["severity"] == "blocking"
     assert issues["tex_core_file_missing"]["repair_policy"] == "ask_user_before_install"
+    assert (
+        str((SCRIPTS_DIR / "check_env.py").resolve())
+        in issues["tex_core_file_missing"]["verify_command"]
+    )
     assert issues["tex_core_file_missing"]["verify_command"].endswith("--stage latex")
 
 

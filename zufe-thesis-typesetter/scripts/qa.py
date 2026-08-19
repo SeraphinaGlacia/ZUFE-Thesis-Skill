@@ -689,8 +689,10 @@ def main() -> int:
     Returns:
         int: QA 非 failed 时返回 0，否则返回 2。
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default=".")
+    parser = argparse.ArgumentParser(
+        description="核对当前构建、账本、PDF 和源码信号，生成流程 C QA 报告。"
+    )
+    parser.add_argument("--root", default=".", help="ZUFE-Thesis 模板根目录。")
     args = parser.parse_args()
     result = qa(Path(args.root).expanduser().resolve())
     print_json(result)

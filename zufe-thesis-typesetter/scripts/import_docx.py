@@ -708,9 +708,15 @@ def main() -> int:
     Returns:
         int: 抽取脚本固定返回 0；后续确认由流程 B 门禁判断。
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default=".")
-    parser.add_argument("--docx", default="workspace/input/thesis.docx")
+    parser = argparse.ArgumentParser(
+        description="正式抽取 DOCX，生成流程 B thesis.json 和 extracted.md。"
+    )
+    parser.add_argument("--root", default=".", help="ZUFE-Thesis 模板根目录。")
+    parser.add_argument(
+        "--docx",
+        default="workspace/input/thesis.docx",
+        help="相对模板根目录的 DOCX 输入路径。",
+    )
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
     docx_path = (
