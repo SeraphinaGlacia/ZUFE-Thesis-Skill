@@ -47,6 +47,7 @@ BUILD_TEMP_FILES = [
 ]
 
 FINAL_BLOCK_STATES = {"rendered", "discarded_with_reason"}
+HEADING_ROLES = {"heading", "chapter_heading", "section_heading", "subsection_heading"}
 MANUAL_CROSS_REFERENCE_RE = re.compile(
     r"(?<![\\A-Za-z])([图表])\s*[0-9０-９]+(?:\s*[.-]\s*[0-9０-９]+)+"
 )
@@ -294,6 +295,84 @@ def manual_cross_reference_hits(source_text: str, limit: int = 20) -> list[str]:
     return hits
 
 
+def heading_level(value: Any) -> int | None:
+    """把账本标题层级解析为严格的 1、2 或 3。"""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int) and value in {1, 2, 3}:
+        return value
+    if isinstance(value, str) and value in {"1", "2", "3"}:
+        return int(value)
+    return None
+
+
+def heading_contract_issues(blocks: list[Any]) -> list[dict[str, Any]]:
+    """检查标题候选是否已有完整的 Agent 语义结论。
+
+    Args:
+        blocks (list[Any]): ``thesis.json.source_blocks`` 列表。
+
+    Returns:
+        list[dict[str, Any]]: 需要回到 Agent 语义确认的标题问题。
+    """
+    issues: list[dict[str, Any]] = []
+    for block in blocks:
+        if not isinstance(block, dict) or block.get("status") == "discarded_with_reason":
+            continue
+        role = str(block.get("semantic_role") or "")
+        candidate_type = str(block.get("candidate_type") or "")
+        raw_level = block.get("level")
+        has_explicit_level = (
+            raw_level is not None and raw_level != "" and raw_level != 0 and raw_level != "0"
+        )
+        if not role and (candidate_type == "heading" or has_explicit_level):
+            issues.append(
+                {
+                    "check": "heading_semantic_role",
+                    "block_id": block.get("id"),
+                    "detail": "标题候选必须由 Agent 明确 semantic_role；若不是标题也要写入实际语义角色。",
+                }
+            )
+        if role and role not in HEADING_ROLES and has_explicit_level:
+            issues.append(
+                {
+                    "check": "heading_semantic_role_conflict",
+                    "block_id": block.get("id"),
+                    "detail": "非标题 semantic_role 不能同时设置标题 level；必须重新确认该源块语义。",
+                }
+            )
+        is_heading = (
+            role in HEADING_ROLES
+            or (not role and candidate_type == "heading")
+            or has_explicit_level
+        )
+        if not is_heading:
+            continue
+
+        if role in HEADING_ROLES:
+            render_title = block.get("render_title")
+            if not isinstance(render_title, str) or not render_title.strip():
+                issues.append(
+                    {
+                        "check": "heading_render_title",
+                        "block_id": block.get("id"),
+                        "detail": "已确认标题必须由 Agent 写入非空 render_title；脚本不根据原文编号自动改写标题。",
+                    }
+                )
+
+        level = heading_level(raw_level)
+        if level is None:
+            issues.append(
+                {
+                    "check": "heading_semantic_level",
+                    "block_id": block.get("id"),
+                    "detail": "标题候选必须由 Agent 结合全文结构明确 level=1/2/3，不能默认猜测。",
+                }
+            )
+            continue
+    return issues
+
+
 def latex_label_reference_issues(source_text: str) -> dict[str, list[str]]:
     """检查章节源码中的 label/ref 闭环。
 
@@ -508,9 +587,13 @@ def block_summary(text: str, limit: int = 80) -> str:
         str: 压缩空白并截断后的摘要。
     """
     compact = re.sub(r"\s+", " ", text or "").strip()
+    if limit <= 0:
+        return ""
     if len(compact) <= limit:
         return compact
-    return compact[: limit - 1] + "..."
+    if limit <= 3:
+        return compact[:limit]
+    return compact[: limit - 3] + "..."
 
 
 def classify_text(text: str, style_name: str = "") -> tuple[str, float]:

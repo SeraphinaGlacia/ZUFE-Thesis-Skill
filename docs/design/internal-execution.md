@@ -182,7 +182,7 @@ flowchart LR
 | --- | --- | --- |
 | 1 | `import_docx.py` | 正式抽取 DOCX，生成 `thesis.json` 和 `extracted.md` |
 | 2 | `export_assets.py` | 把 DOCX 媒体复制到 `Images/word_media/`（但不替代语义确认） |
-| 3 | Agent 语义确认 | 处理章节、摘要、关键词、图表、公式、参考文献、致谢、附录等归属 |
+| 3 | `ledger.py` + Agent 语义确认 | 分页读取待处理源块和标题上下文，再处理章节、摘要、关键词、图表、公式、参考文献、致谢、附录等归属 |
 | 4 | `render_basicinfo.py` | 写入 `chapters/basicinfo.tex`，并执行 metadata/英文内容门禁 |
 | 5 | `render_chapters.py` | 写入 `chapters/*.tex` 和 `chapters/mainbody.tex` |
 | 6 | `render_bib.py` | 写入已确认的 `Reference.bib` 参考文献 |
@@ -212,6 +212,7 @@ flowchart LR
 | `check_env.py` | A/C | 检查 Python DOCX 环境、LaTeX/Biber、QA 工具和关键包，并输出环境 issue code |
 | `prescan_docx.py` | A | 轻量预扫描 Word，提取 metadata 候选 |
 | `import_docx.py` | B | 正式抽取源块、run 级证据、源文件指纹和 unsupported features |
+| `ledger.py` | B | 只读汇总或分页查询账本，并提供标题候选、Word 证据和相邻上下文 |
 | `export_assets.py` | B | 核对源文件指纹后导出 DOCX 媒体资源，并回写资源证据 |
 | `render_basicinfo.py` | B | 渲染封面、摘要、关键词和超链接隐藏设置，并验证源块字段绑定 |
 | `render_chapters.py` | B | 拒绝重复章节目标和无效图片资源，再渲染正文、表格、图片和 `mainbody.tex` |
@@ -229,7 +230,7 @@ flowchart LR
 
 | tests | 主要覆盖目标 |
 | --- | --- |
-| `test_regressions.py` | DOCX run 格式、内容控件、纯表格 Word、重复图片、源指纹、环境提示、basicinfo 完整承接、章节/图片门禁、事务式 BibTeX、构建绑定、源码/PDF QA 和人工复核状态 |
+| `test_regressions.py` | DOCX run 格式、内容控件、纯表格 Word、重复图片、源指纹、环境提示、basicinfo 完整承接、标题语义结论、章节/图片门禁、事务式 BibTeX、构建绑定、源码/PDF QA 和人工复核状态 |
 | `test_render_chapters.py` | 章节标题层级渲染 |
 
 ### 维护者验证命令

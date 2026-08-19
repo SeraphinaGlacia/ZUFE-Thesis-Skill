@@ -6,10 +6,19 @@ from __future__ import annotations
 import argparse
 import shutil
 import subprocess
+from collections import Counter
 from pathlib import Path
 
 from check_flow_b_gate import check as check_flow_b_gate
-from common import BUILD_TEMP_FILES, archive_path, now_iso, print_json, rel, write_json
+from common import (
+    BUILD_TEMP_FILES,
+    archive_path,
+    block_summary,
+    now_iso,
+    print_json,
+    rel,
+    write_json,
+)
 
 COMPILE_CHAIN = [
     ["xelatex", "-interaction=nonstopmode", "-halt-on-error", "-file-line-error", "main.tex"],
@@ -218,18 +227,73 @@ def build(root: Path, timeout: int) -> dict:
     return result
 
 
+def cli_summary(result: dict) -> dict:
+    """生成有界的流程 C 构建 CLI 输出。
+
+    Args:
+        result (dict): ``build`` 返回并已写入报告的完整结果。
+
+    Returns:
+        dict: 构建状态、步骤摘要、门禁问题概况和报告路径。
+    """
+    gate = result.get("flow_b_gate", {})
+    gate = gate if isinstance(gate, dict) else {}
+    raw_issues = gate.get("issues", [])
+    issues = raw_issues if isinstance(raw_issues, list) else []
+    counts = Counter(
+        str(issue.get("check") or "unknown") for issue in issues if isinstance(issue, dict)
+    )
+    raw_steps = result.get("steps", [])
+    steps = raw_steps if isinstance(raw_steps, list) else []
+    return {
+        "flow": result.get("flow"),
+        "step": result.get("step"),
+        "status": result.get("status"),
+        "new_pdf": result.get("new_pdf"),
+        "pdf": result.get("pdf"),
+        "step_count": len(steps),
+        "failed_step_count": sum(
+            1 for step in steps if isinstance(step, dict) and step.get("exit_code") != 0
+        ),
+        "flow_b_gate": {
+            "status": gate.get("status"),
+            "issue_count": len(issues),
+            "issue_counts_by_check": dict(sorted(counts.items())),
+            "issue_examples": [
+                {
+                    "check": issue.get("check"),
+                    "block_id": issue.get("block_id"),
+                    "detail": block_summary(str(issue.get("detail") or ""), 160),
+                }
+                for issue in issues[:5]
+                if isinstance(issue, dict)
+            ],
+        },
+        "report_paths": [
+            "workspace/output/build_result.json",
+            "workspace/output/report.md",
+        ],
+        "next_steps": result.get("next_steps", []),
+    }
+
+
 def main() -> int:
     """解析命令行参数并执行流程 C 构建。
 
     Returns:
         int: 构建通过时返回 0，否则返回 2。
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default=".")
-    parser.add_argument("--timeout", type=int, default=600)
+    parser = argparse.ArgumentParser(description="重跑流程 B 门禁后执行固定 XeLaTeX/Biber 编译链。")
+    parser.add_argument("--root", default=".", help="ZUFE-Thesis 模板根目录。")
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=600,
+        help="单个编译命令的超时秒数，默认 600。",
+    )
     args = parser.parse_args()
     result = build(Path(args.root).expanduser().resolve(), args.timeout)
-    print_json(result)
+    print_json(cli_summary(result))
     return 0 if result["status"] == "passed" else 2
 
 

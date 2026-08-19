@@ -14,6 +14,8 @@
 
 环境判断先读 `environment-sop.md`。只有需要平台命令、安装细节、PATH 修复或 TeX 包补装时，才读取 `environment-setup-and-repair.md`。
 
+`prescan_docx.py` 默认把完整结果写入 `workspace/intermediate/prescan.json`，stdout 只返回 metadata 候选、计数、少量结构示例和报告路径。需要更多预扫描证据时读取该报告，不要要求命令把全部段落重复输出到对话。
+
 ## 模板签名
 
 模板根目录必须包含：

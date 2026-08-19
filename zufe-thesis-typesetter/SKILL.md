@@ -59,13 +59,14 @@ workspace/output/qa_report.md
 
 ## 脚本使用
 
-所有脚本接受 `--root`，并输出 JSON 或写入 JSON 报告。Agent 使用 JSON 做判断，再把结果翻译成普通用户能理解的简短清单。
+所有脚本接受 `--root`，并输出 JSON 或写入 JSON 报告。高数据量命令的 stdout 只给有界摘要和完整报告路径；Agent 先读摘要，只在需要具体证据时分页查询或读取报告。正常执行优先使用已文档化的 CLI，只有调试或维护脚本时才读取源码。
 
 - `scripts/check_template.py`：检查 ZUFE-Thesis 模板签名。
 - `scripts/prepare_workspace.py`：创建 `workspace/`，把 DOCX 放到标准路径，并可在用户批准后归档旧输出。
 - `scripts/check_env.py`：按 profile 检查 Python、`python-docx`、`xelatex`、`biber`、模板关键 TeX 包和 QA 工具；它不替代模板签名或 DOCX 可读性检查。
 - `scripts/prescan_docx.py`：流程 A 的 DOCX 轻量预扫描和 metadata 候选提取。不得生成正式 `thesis.json`。
 - `scripts/import_docx.py`：流程 B 正式抽取，生成 `thesis.json` 和 `extracted.md`。
+- `scripts/ledger.py`：只读汇总、分页查询源块并生成带前后文的标题候选大纲；不得用它绕过 Agent 的语义判断。
 - `scripts/export_assets.py`：核对源 DOCX 指纹后，抽取媒体到 `Images/word_media/` 并记录证据。
 - `scripts/render_basicinfo.py`：把 metadata、摘要和关键词写入 `chapters/basicinfo.tex`。
 - `scripts/render_chapters.py`：在拒绝重复章节目标和无效图片资源后，把已确认章节映射写入 `chapters/*.tex` 和 `chapters/mainbody.tex`。
@@ -86,6 +87,7 @@ Agent 负责语义判断，脚本不得替代：
 - 不从文件名猜测学院、专业、日期、导师或报告类型；metadata 只能来自 Word 证据或用户确认。
 - 不把 run 级样式问题当成普通文本问题忽略；上标、下标、表格字号异常都必须在流程 B/C 暴露。
 - 流程 C 不修正文档语义；内容归属错误必须退回流程 B。
+- 标题识别必须混合使用脚本候选、Word 样式、原文编号、相邻段落和全文层级；脚本候选和编号外观只能提供线索，不能单独决定标题语义、层级或删改内容。
 
 ## 转换质量硬约束
 
@@ -99,6 +101,14 @@ Agent 负责语义判断，脚本不得替代：
 - 表格默认使用模板风格字号 `\zihao{5}`。不得无条件使用 `\resizebox{\textwidth}{!}{...}`，因为它会把较窄表格放大并破坏字号。
 - 只有表格自然宽度确实超过版心且没有更稳妥的列宽方案时，才允许缩小表格；禁止为了“填满版心”放大表格。
 - 脚注、尾注、公式、超链接、批注、修订痕迹、文本框、内容控件、外部导入内容、链接图片、Word 域/自动编号、图表/SmartArt、OLE 对象和页眉页脚等暂不自动转换内容必须进入 `unsupported_features`，不得静默忽略。
+
+## 已验证问题清单
+
+- **标题编号重复**：Agent 必须保留原始 `text`，结合语义判断原文开头是否属于人工编号，并为每个标题显式写入 `render_title`。脚本只校验并原样渲染该字段，不得用正则自动删除 `第一章`、`1.1`、`一、` 等外观相似文本。
+- **标题层级误判**：Agent 必须先按源顺序查看全部标题候选及其前后文，再统一确认 `semantic_role=heading`、`level=1/2/3` 和 `render_title`。标题块只有编号、正文位于相邻块时必须先确认是否合并。
+- **图片题注误填**：图片媒体路径和源块摘要不得自动充当图题；`caption` 只能来自 Word 证据或 Agent/用户确认。
+- **引用类型误判**：`reference_rewrites` 必须显式写入 `target_kind` 或 `prefix`；类型缺失时不得默认按图片引用生成 `图~\ref{...}`。
+- 后续真实测试中发现的可复现问题，应同时增加回归测试，并在本节补充一条会改变 Agent 决策的短规则；实现细节放入对应 reference，避免把本文件扩展成故障日志。
 
 ## 详细参考
 

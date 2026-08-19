@@ -10,6 +10,9 @@ from pathlib import Path
 
 from check_flow_b_gate import ledger_schema_issues
 from common import (
+    HEADING_ROLES,
+    block_summary,
+    heading_level,
     latex_escape,
     now_iso,
     print_json,
@@ -44,14 +47,16 @@ def reference_prefix(kind: str) -> str:
         kind (str): 引用类型，例如 ``figure``、``table`` 或 ``equation``。
 
     Returns:
-        str: 引用前缀。
+        str: 已知引用类型对应的前缀；类型不明确时返回空字符串。
     """
     normalized = (kind or "").strip().lower()
+    if normalized in {"figure", "fig", "image"}:
+        return "图"
     if normalized in {"table", "tab"}:
         return "表"
     if normalized in {"equation", "formula", "eq"}:
         return "式"
-    return "图"
+    return ""
 
 
 def reference_replacement(rewrite: dict) -> str:
@@ -72,6 +77,8 @@ def reference_replacement(rewrite: dict) -> str:
     prefix = rewrite.get("prefix") or reference_prefix(
         str(rewrite.get("target_kind") or rewrite.get("kind") or rewrite.get("type") or "")
     )
+    if not prefix:
+        return ""
     return f"{latex_escape(str(prefix))}~\\ref{{{label}}}"
 
 
@@ -276,18 +283,30 @@ def block_to_latex(block: dict) -> str:
     Returns:
         str: 源块对应的 LaTeX 文本。
     """
+    text = block.get("text") or block.get("summary") or ""
+    role = str(block.get("semantic_role") or "")
+    level = heading_level(block.get("level"))
+    if role in HEADING_ROLES:
+        render_title = block.get("render_title")
+        if level is None:
+            raise ValueError("heading block requires level=1/2/3")
+        if not isinstance(render_title, str) or not render_title.strip():
+            raise ValueError("heading block requires a non-empty render_title")
+        command = {1: "chapter", 2: "section", 3: "subsection"}[level]
+        return tex_heading(render_title.strip(), command)
+    if level is not None:
+        raise ValueError("non-heading block cannot define a heading level")
     if block.get("latex"):
         return str(block["latex"])
-    text = block.get("text") or block.get("summary") or ""
-    role = block.get("semantic_role") or block.get("candidate_type")
-    level = int(block.get("level") or 0)
     if block.get("source_type") == "image":
         path = block.get("asset_output") or ""
-        caption = block.get("caption") or block.get("summary") or ""
+        caption = block.get("caption")
         label = latex_label_value(block.get("label") or block.get("latex_label"))
-        caption_lines = [f"  \\caption{{{latex_escape(caption)}}}"]
-        if label:
-            caption_lines.append(f"  \\label{{{label}}}")
+        caption_lines = []
+        if isinstance(caption, str) and caption.strip():
+            caption_lines.append(f"  \\caption{{{latex_escape(caption.strip())}}}")
+            if label:
+                caption_lines.append(f"  \\label{{{label}}}")
         return "\n".join(
             [
                 "\\begin{figure}[htbp]",
@@ -301,14 +320,6 @@ def block_to_latex(block: dict) -> str:
         )
     if block.get("source_type") == "table":
         return table_to_latex(block)
-    if level == 1:
-        return tex_heading(text, "chapter")
-    if level == 2:
-        return tex_heading(text, "section")
-    if level == 3:
-        return tex_heading(text, "subsection")
-    if role == "heading":
-        return tex_heading(text, "chapter")
     rendered = runs_to_latex(block) or latex_escape(text)
     rendered = apply_reference_rewrites(rendered, block.get("reference_rewrites"))
     return rendered + "\n"
@@ -501,16 +512,67 @@ def render(root: Path, thesis_path: Path, allow_incomplete: bool) -> dict:
     }
 
 
+def cli_summary(result: dict, report_path: str) -> dict:
+    """生成有界的章节渲染 CLI 输出。
+
+    Args:
+        result (dict): ``render`` 返回的完整结果。
+        report_path (str): 完整 JSON 报告路径。
+
+    Returns:
+        dict: 状态、计数、少量示例和报告路径。
+    """
+    blocking = result.get("blocking_blocks", [])
+    invalid = result.get("invalid_structure_blocks", [])
+    issues = result.get("issues", [])
+    return {
+        "flow": result.get("flow"),
+        "step": result.get("step"),
+        "status": result.get("status"),
+        "target_count": len(result.get("targets", [])),
+        "blocking_block_count": len(blocking) if isinstance(blocking, list) else 0,
+        "blocking_block_examples": blocking[:10] if isinstance(blocking, list) else [],
+        "invalid_structure_count": len(invalid) if isinstance(invalid, list) else 0,
+        "issue_count": len(issues) if isinstance(issues, list) else 0,
+        "issue_examples": [
+            {
+                "check": issue.get("check"),
+                "block_id": issue.get("block_id"),
+                "detail": block_summary(str(issue.get("detail") or ""), 160),
+            }
+            for issue in (issues[:5] if isinstance(issues, list) else [])
+            if isinstance(issue, dict)
+        ],
+        "report_path": report_path,
+        "next_steps": result.get("next_steps", []),
+    }
+
+
 def main() -> int:
     """解析命令行参数并执行章节渲染。
 
     Returns:
         int: 渲染通过时返回 0，否则返回 2。
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default=".")
-    parser.add_argument("--thesis-json", default="workspace/intermediate/thesis.json")
-    parser.add_argument("--allow-incomplete", action="store_true")
+    parser = argparse.ArgumentParser(
+        description="把已确认的 thesis.json 章节映射渲染为 LaTeX 章节文件。"
+    )
+    parser.add_argument("--root", default=".", help="ZUFE-Thesis 模板根目录。")
+    parser.add_argument(
+        "--thesis-json",
+        default="workspace/intermediate/thesis.json",
+        help="相对模板根目录的流程 B 账本路径。",
+    )
+    parser.add_argument(
+        "--allow-incomplete",
+        action="store_true",
+        help="允许仍有待确认块时渲染；仅用于明确的人工检查。",
+    )
+    parser.add_argument(
+        "--output",
+        default="workspace/output/render_chapters.json",
+        help="完整渲染结果 JSON 路径。stdout 只输出有界摘要。",
+    )
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
     thesis_path = (
@@ -519,7 +581,13 @@ def main() -> int:
         else Path(args.thesis_json).resolve()
     )
     result = render(root, thesis_path, args.allow_incomplete)
-    print_json(result)
+    output = (
+        (root / args.output).resolve()
+        if not Path(args.output).is_absolute()
+        else Path(args.output).resolve()
+    )
+    write_json(output, result)
+    print_json(cli_summary(result, rel(output, root)))
     return 0 if result["status"] == "passed" else 2
 
 

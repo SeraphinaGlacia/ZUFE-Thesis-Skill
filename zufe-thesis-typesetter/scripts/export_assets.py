@@ -104,16 +104,52 @@ def export_assets(root: Path, docx_path: Path, thesis_path: Path) -> dict:
     }
 
 
+def cli_summary(result: dict, thesis_json_path: str) -> dict:
+    """生成有界的媒体导出 CLI 输出。
+
+    Args:
+        result (dict): ``export_assets`` 返回的完整结果。
+        thesis_json_path (str): 保存完整资源映射的账本路径。
+
+    Returns:
+        dict: 状态、导出数量、少量示例和账本路径。
+    """
+    raw_outputs = result.get("outputs", [])
+    outputs = raw_outputs if isinstance(raw_outputs, list) else []
+    return {
+        "flow": result.get("flow"),
+        "step": result.get("step"),
+        "status": result.get("status"),
+        "output_count": len(outputs),
+        "output_examples": outputs[:5],
+        "thesis_json": thesis_json_path,
+        "gate": result.get("gate"),
+        "detail": result.get("detail"),
+        "note": result.get("note"),
+        "next_steps": result.get("next_steps", []),
+    }
+
+
 def main() -> int:
     """解析命令行参数并执行 DOCX 媒体导出。
 
     Returns:
         int: 导出成功时返回 0，源文件或账本门禁阻塞时返回 2。
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default=".")
-    parser.add_argument("--docx", default="workspace/input/thesis.docx")
-    parser.add_argument("--thesis-json", default="workspace/intermediate/thesis.json")
+    parser = argparse.ArgumentParser(
+        description="导出 DOCX 内嵌媒体，并把完整资源映射写回 thesis.json。"
+    )
+    parser.add_argument("--root", default=".", help="ZUFE-Thesis 模板根目录。")
+    parser.add_argument(
+        "--docx",
+        default="workspace/input/thesis.docx",
+        help="相对模板根目录的 DOCX 输入路径。",
+    )
+    parser.add_argument(
+        "--thesis-json",
+        default="workspace/intermediate/thesis.json",
+        help="相对模板根目录的流程 B 账本路径。",
+    )
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
     docx_path = (
@@ -127,7 +163,7 @@ def main() -> int:
         else Path(args.thesis_json).resolve()
     )
     result = export_assets(root, docx_path, thesis_path)
-    print_json(result)
+    print_json(cli_summary(result, rel(thesis_path, root)))
     return 0 if result["status"] == "passed" else 2
 
 

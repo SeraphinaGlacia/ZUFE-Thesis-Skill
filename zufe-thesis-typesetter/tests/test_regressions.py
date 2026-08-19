@@ -123,7 +123,14 @@ def test_import_docx_preserves_superscript_runs():
 def test_render_chapters_preserves_superscript_and_heading_levels():
     render_chapters = load_module("render_chapters")
     assert (
-        render_chapters.block_to_latex({"semantic_role": "heading", "level": 2, "text": "二级标题"})
+        render_chapters.block_to_latex(
+            {
+                "semantic_role": "heading",
+                "level": 2,
+                "render_title": "二级标题",
+                "text": "1.1 二级标题",
+            }
+        )
         == "\\section{二级标题}"
     )
     assert (
@@ -153,6 +160,222 @@ def test_render_chapters_preserves_superscript_and_heading_levels():
     )
 
 
+def test_render_chapters_uses_explicit_agent_titles_without_reinterpreting_numbers():
+    render_chapters = load_module("render_chapters")
+
+    assert (
+        render_chapters.block_to_latex(
+            {
+                "semantic_role": "heading",
+                "level": 1,
+                "render_title": "绪论",
+                "text": "第一章 绪论",
+            }
+        )
+        == "\\chapter{绪论}"
+    )
+    assert (
+        render_chapters.block_to_latex(
+            {
+                "semantic_role": "heading",
+                "level": 1,
+                "render_title": "3.14 是圆周率吗？",
+                "text": "3.14 是圆周率吗？",
+            }
+        )
+        == "\\chapter{3.14 是圆周率吗？}"
+    )
+    assert (
+        render_chapters.block_to_latex(
+            {
+                "semantic_role": "heading",
+                "level": 2,
+                "render_title": "一、二线城市消费差异",
+                "text": "一、二线城市消费差异",
+            }
+        )
+        == "\\section{一、二线城市消费差异}"
+    )
+    assert (
+        render_chapters.block_to_latex(
+            {
+                "semantic_role": "heading",
+                "level": 3,
+                "render_title": "研究问题",
+                "text": "（一）研究问题",
+            }
+        )
+        == "\\subsection{研究问题}"
+    )
+    assert (
+        render_chapters.block_to_latex(
+            {
+                "source_type": "paragraph",
+                "text": "一、这里是正文列表，不是标题。",
+            }
+        )
+        == "一、这里是正文列表，不是标题。\n"
+    )
+
+
+def test_heading_semantics_require_explicit_agent_decisions():
+    common = load_module("common")
+    assert common.classify_text("一、研究设计", "Normal") == ("body", 0.35)
+    assert common.classify_text("第一章 绪论", "Normal") == ("heading", 0.8)
+    assert common.classify_text("2024 年行业报告", "Normal") == ("body", 0.35)
+    assert common.classify_text("1. 参考文献条目", "Normal") == ("reference_or_list", 0.45)
+    issues = common.heading_contract_issues(
+        [
+            {
+                "id": "p0001",
+                "candidate_type": "heading",
+                "status": "mapped",
+                "text": "第一章 绪论",
+            },
+            {
+                "id": "p0002",
+                "semantic_role": "heading",
+                "level": 1,
+                "status": "mapped",
+                "text": "1.2 研究背景",
+            },
+            {
+                "id": "p0003",
+                "semantic_role": "heading",
+                "level": 2,
+                "render_title": "研究设计",
+                "status": "mapped",
+                "text": "一、研究设计",
+            },
+            {
+                "id": "p0004",
+                "candidate_type": "heading",
+                "semantic_role": "body",
+                "status": "mapped",
+                "text": "1. 正文列表",
+            },
+            {
+                "id": "p0005",
+                "candidate_type": "body",
+                "semantic_role": "body",
+                "level": 2,
+                "status": "mapped",
+                "text": "普通正文",
+            },
+            {
+                "id": "p0006",
+                "candidate_type": "heading",
+                "semantic_role": "heading",
+                "level": True,
+                "render_title": "无效布尔层级",
+                "status": "mapped",
+                "text": "无效布尔层级",
+            },
+            {
+                "id": "p0007",
+                "candidate_type": "heading",
+                "semantic_role": "heading",
+                "level": 1,
+                "render_title": "",
+                "status": "mapped",
+                "text": "第一章",
+            },
+        ]
+    )
+
+    issue_names = {issue["check"] for issue in issues}
+    assert issue_names == {
+        "heading_semantic_role",
+        "heading_semantic_role_conflict",
+        "heading_semantic_level",
+        "heading_render_title",
+    }
+    assert {issue["block_id"] for issue in issues} == {
+        "p0001",
+        "p0002",
+        "p0005",
+        "p0006",
+        "p0007",
+    }
+
+
+def test_render_chapters_blocks_unconfirmed_heading_semantics_before_writing():
+    render_chapters = load_module("render_chapters")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "chapters").mkdir()
+        (root / "workspace/intermediate").mkdir(parents=True)
+        thesis_path = root / "workspace/intermediate/thesis.json"
+        thesis_path.write_text(
+            json.dumps(
+                {
+                    "source_blocks": [
+                        {
+                            "id": "p0001",
+                            "source_type": "paragraph",
+                            "candidate_type": "heading",
+                            "semantic_role": "heading",
+                            "level": 1,
+                            "text": "第一章 绪论",
+                            "status": "mapped",
+                            "target_slot": "chapters/1_intro.tex",
+                        }
+                    ],
+                    "structure": {
+                        "chapters": [
+                            {
+                                "title": "绪论",
+                                "file": "chapters/1_intro.tex",
+                                "block_ids": ["p0001"],
+                            }
+                        ]
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        result = render_chapters.render(root, thesis_path, allow_incomplete=False)
+
+        assert result["status"] == "blocked"
+        assert "heading_render_title" in {issue["check"] for issue in result["issues"]}
+        assert not (root / "chapters/1_intro.tex").exists()
+
+
+def test_flow_b_gate_requires_explicit_float_and_reference_contracts():
+    check_flow_b_gate = load_module("check_flow_b_gate")
+    issues = check_flow_b_gate.ledger_schema_issues(
+        {
+            "source_blocks": [
+                {
+                    "id": "img0001",
+                    "source_type": "image",
+                    "status": "mapped",
+                    "label": "fig:missing-caption",
+                },
+                {
+                    "id": "p0001",
+                    "source_type": "paragraph",
+                    "candidate_type": "body",
+                    "status": "mapped",
+                    "reference_rewrites": [
+                        {
+                            "source_text": "表1.2",
+                            "target_label": "tab:sample-info",
+                        }
+                    ],
+                },
+            ]
+        }
+    )
+
+    assert {issue["check"] for issue in issues} == {
+        "labeled_float_caption",
+        "reference_rewrite_fields",
+    }
+
+
 def test_render_chapters_outputs_labels_and_reference_rewrites():
     render_chapters = load_module("render_chapters")
     figure_latex = render_chapters.block_to_latex(
@@ -165,6 +388,16 @@ def test_render_chapters_outputs_labels_and_reference_rewrites():
     )
     assert r"\caption{年龄分布图}" in figure_latex
     assert r"\label{fig:age-distribution}" in figure_latex
+
+    uncaptioned_figure_latex = render_chapters.block_to_latex(
+        {
+            "source_type": "image",
+            "asset_output": "Images/word_media/image4.png",
+            "summary": "word/media/image4.png",
+        }
+    )
+    assert r"\caption{" not in uncaptioned_figure_latex
+    assert "word/media/image4.png" not in uncaptioned_figure_latex
 
     table_latex = render_chapters.block_to_latex(
         {
@@ -220,6 +453,21 @@ def test_render_chapters_outputs_labels_and_reference_rewrites():
     )
     assert r"图~\ref{fig:short}、图~\ref{fig:long}" in overlapping_latex
     assert r"\ref{fig:short}0" not in overlapping_latex
+
+    unresolved_kind_latex = render_chapters.block_to_latex(
+        {
+            "source_type": "paragraph",
+            "text": "具体可见表1.2。",
+            "reference_rewrites": [
+                {
+                    "source_text": "表1.2",
+                    "target_label": "tab:sample-info",
+                }
+            ],
+        }
+    )
+    assert "表1.2" in unresolved_kind_latex
+    assert r"图~\ref{tab:sample-info}" not in unresolved_kind_latex
 
 
 def test_check_template_requires_new_fonts_directory_layout():
@@ -1750,6 +1998,160 @@ def test_diagnose_build_writes_actionable_result():
         assert written == result
 
 
+def test_diagnose_build_deduplicates_repeated_log_evidence():
+    diagnose_build = load_module("diagnose_build")
+    message = "! LaTeX Error: File `missing-package.sty' not found."
+
+    issues = diagnose_build.classify(f"{message}\n{message}\n")
+
+    assert len(issues) == 1
+    assert issues[0]["category"] == "environment_issue"
+
+
+def test_high_volume_cli_summaries_are_bounded_without_truncating_results():
+    check_flow_b_gate = load_module("check_flow_b_gate")
+    prescan_docx = load_module("prescan_docx")
+    issues = [
+        {"check": "source_block_state", "block_id": f"p{index:04d}", "detail": "待处理"}
+        for index in range(50)
+    ]
+    gate_result = {
+        "flow": "B",
+        "gate": "completion",
+        "status": "blocked",
+        "issues": issues,
+    }
+    gate_summary = check_flow_b_gate.cli_summary(gate_result, "workspace/output/flow_b_gate.json")
+    preview = [
+        {"index": index, "text": f"段落 {index}", "candidate_type": "body"} for index in range(80)
+    ]
+    prescan_result = {
+        "flow": "A",
+        "gate": "word_prescan",
+        "status": "passed",
+        "metadata_candidates": {"thesis_title_cn": "题" * 1000},
+        "structure_preview": preview,
+    }
+    prescan_summary = prescan_docx.cli_summary(
+        prescan_result, "workspace/intermediate/prescan.json"
+    )
+
+    assert gate_summary["issue_count"] == 50
+    assert len(gate_summary["issue_examples"]) == 5
+    assert len(gate_result["issues"]) == 50
+    assert prescan_summary["structure_preview_count"] == 80
+    assert len(prescan_summary["structure_preview_examples"]) == 10
+    assert len(prescan_summary["metadata_candidates"]["thesis_title_cn"]) == 240
+    assert len(prescan_result["structure_preview"]) == 80
+    assert len(prescan_result["metadata_candidates"]["thesis_title_cn"]) == 1000
+
+
+def test_flow_b_gate_cli_writes_full_report_and_prints_its_path():
+    check_flow_b_gate = load_module("check_flow_b_gate")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        stdout = io.StringIO()
+        argv = ["check_flow_b_gate.py", "--root", str(root)]
+
+        with patch.object(sys, "argv", argv), contextlib.redirect_stdout(stdout):
+            exit_code = check_flow_b_gate.main()
+
+        summary = json.loads(stdout.getvalue())
+        report_path = root / summary["report_path"]
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        assert exit_code == 2
+        assert summary["status"] == "blocked"
+        assert summary["issue_count"] == len(report["issues"])
+        assert report["issues"][0]["check"] == "thesis_json_missing"
+
+
+def test_prescan_cli_refuses_to_overwrite_the_formal_ledger():
+    prescan_docx = load_module("prescan_docx")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        stdout = io.StringIO()
+        argv = [
+            "prescan_docx.py",
+            "--root",
+            str(root),
+            "--output",
+            "workspace/intermediate/thesis.json",
+        ]
+
+        with patch.object(sys, "argv", argv), contextlib.redirect_stdout(stdout):
+            exit_code = prescan_docx.main()
+
+        payload = json.loads(stdout.getvalue())
+        assert exit_code == 2
+        assert payload["error_code"] == "prescan_cannot_overwrite_thesis_json"
+        assert not (root / "workspace/intermediate/thesis.json").exists()
+
+
+def test_ledger_queries_are_paginated_and_preserve_heading_context():
+    ledger = load_module("ledger")
+    blocks = [
+        {
+            "id": f"p{index:04d}",
+            "order": index,
+            "source_type": "paragraph",
+            "candidate_type": "heading" if index == 3 else "body",
+            "semantic_role": "heading" if index == 3 else None,
+            "level": 1 if index == 3 else None,
+            "render_title": "绪论" if index == 3 else None,
+            "text": "第一章 绪论" if index == 3 else f"正文段落 {index}",
+            "status": "mapped" if index == 3 else "needs_confirmation",
+            "evidence": {"style": "Heading 1" if index == 3 else "Normal"},
+        }
+        for index in range(1, 26)
+    ]
+    thesis = {
+        "schema_version": "1.0",
+        "source_blocks": blocks,
+        "structure": {"chapters": []},
+        "unsupported_features": [],
+    }
+
+    summary = ledger.summary(thesis, "workspace/intermediate/thesis.json")
+    page = ledger.pending(thesis, offset=5, limit=4)
+    outline = ledger.outline(thesis, offset=0, limit=20)
+    block = ledger.get_block(thesis, "p0003")
+
+    assert summary["source_block_count"] == 25
+    assert summary["heading_candidate_count"] == 1
+    assert page["returned"] == 4
+    assert page["has_more"] is True
+    assert len(page["items"]) == 4
+    assert outline["total"] == 1
+    assert outline["items"][0]["text"] == "第一章 绪论"
+    assert outline["items"][0]["render_title"] == "绪论"
+    assert outline["items"][0]["evidence"]["style"] == "Heading 1"
+    assert outline["items"][0]["previous"]["id"] == "p0002"
+    assert outline["items"][0]["next"]["id"] == "p0004"
+    assert block["block"]["text"] == "第一章 绪论"
+
+
+def test_ledger_cli_blocks_malformed_source_blocks():
+    ledger = load_module("ledger")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        thesis_path = root / "workspace/intermediate/thesis.json"
+        thesis_path.parent.mkdir(parents=True)
+        thesis_path.write_text(
+            json.dumps({"source_blocks": [{"id": "p0001"}, "invalid"]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        stdout = io.StringIO()
+        argv = ["ledger.py", "--root", str(root), "summary"]
+
+        with patch.object(sys, "argv", argv), contextlib.redirect_stdout(stdout):
+            exit_code = ledger.main()
+
+        result = json.loads(stdout.getvalue())
+        assert exit_code == 2
+        assert result["status"] == "blocked"
+        assert result["error_code"] == "source_blocks_invalid"
+
+
 def test_flow_b_gate_validates_ledger_identity_and_chapter_ownership():
     check_flow_b_gate = load_module("check_flow_b_gate")
     thesis = {
@@ -2155,6 +2557,10 @@ def test_qa_success_requires_manual_visual_review():
 
 if __name__ == "__main__":
     test_import_docx_preserves_superscript_runs()
+    test_render_chapters_uses_explicit_agent_titles_without_reinterpreting_numbers()
+    test_heading_semantics_require_explicit_agent_decisions()
+    test_render_chapters_blocks_unconfirmed_heading_semantics_before_writing()
+    test_flow_b_gate_requires_explicit_float_and_reference_contracts()
     test_check_template_requires_new_fonts_directory_layout()
     test_check_template_guides_template_download_fallbacks()
     test_prepare_workspace_requires_consent_then_archives_old_outputs()
@@ -2209,6 +2615,12 @@ if __name__ == "__main__":
     test_build_stops_before_archiving_when_flow_b_gate_is_blocked()
     test_diagnose_build_classifies_standard_latex_missing_file_messages()
     test_diagnose_build_writes_actionable_result()
+    test_diagnose_build_deduplicates_repeated_log_evidence()
+    test_high_volume_cli_summaries_are_bounded_without_truncating_results()
+    test_flow_b_gate_cli_writes_full_report_and_prints_its_path()
+    test_prescan_cli_refuses_to_overwrite_the_formal_ledger()
+    test_ledger_queries_are_paginated_and_preserve_heading_context()
+    test_ledger_cli_blocks_malformed_source_blocks()
     test_flow_b_gate_validates_ledger_identity_and_chapter_ownership()
     test_flow_b_gate_reports_malformed_source_block_without_crashing()
     test_flow_b_gate_rechecks_source_docx_fingerprint_before_flow_c()

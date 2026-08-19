@@ -47,6 +47,9 @@
   "order": 1,
   "source_type": "paragraph",
   "candidate_type": "body",
+  "semantic_role": null,
+  "level": null,
+  "render_title": null,
   "text": "原始文本",
   "runs": [
     {
@@ -97,6 +100,25 @@
 - `discarded_with_reason` 必须有 `discard_reason`。
 
 不要在没有用户确认原因的情况下，把高风险源块改成 `discarded_with_reason`。
+
+## 标题语义字段
+
+`candidate_type` 是脚本根据 Word 样式和编号模式给出的候选，不是最终结论。Agent 必须结合 `evidence`、前后源块和全文大纲确认标题，并写入：
+
+```json
+{
+  "id": "p0007",
+  "candidate_type": "heading",
+  "semantic_role": "heading",
+  "level": 1,
+  "render_title": "绪论",
+  "text": "第一章 绪论"
+}
+```
+
+`level` 只允许 `1`、`2`、`3`，分别对应 `\chapter`、`\section`、`\subsection`。若 `candidate_type=heading` 实际是正文、列表或其他内容，Agent 应写入真实 `semantic_role` 明确否决候选，而不是给它强行分配标题层级。原文完整保留在 `text` 作为审计证据；Agent 结合全文语义决定最终标题并写入非空 `render_title`，`render_chapters.py` 只负责原样转义和渲染。标题候选缺少语义结论，或已确认标题缺少 `level`、`render_title` 时，流程 B 必须阻塞。
+
+使用 `scripts/ledger.py outline` 分页查看标题候选、Word 证据和相邻源块；使用 `get <block_id>` 时才展开单个完整源块。
 
 ## 源 DOCX 完整性
 
@@ -176,6 +198,7 @@
 - 同一媒体在一个段落中出现多次时，每次出现都必须有独立 image 源块；`evidence.anchor_image_occurrence` 记录段落内出现顺序。
 - `asset_status=pending_export` 表示资源尚未复制；`asset_status=exported` 表示 `asset_output` 已指向 `Images/word_media/...`。
 - `asset_status=exported` 不代表图片语义位置已确认。图片仍需通过 `target_slot` 或章节结构确认放入哪个章节文件。
+- `caption` 只能来自 Word 图题证据或 Agent/用户确认；`summary` 中的媒体路径不得自动充当图题。
 - 已确认的图片或表格若会被正文引用，必须写入稳定 `label`，并在渲染时紧跟 `\caption{...}` 输出 `\label{...}`。
 
 ## 图表引用改写规则
@@ -199,6 +222,8 @@
   ]
 }
 ```
+
+每条结构化改写必须显式提供 `target_kind` 或 `prefix`。缺少引用类型时，脚本保留原文并等待确认，不默认生成图片引用。
 
 目标图片或表格源块需要有对应 label：
 

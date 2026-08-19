@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from common import block_summary, classify_text, now_iso, print_json, write_json
+from common import block_summary, classify_text, now_iso, print_json, rel, write_json
 
 TRANSPARENT_BODY_CONTAINERS = {"sdt", "sdtContent", "customXml", "smartTag"}
 
@@ -302,16 +302,58 @@ def prescan(root: Path, docx_path: Path) -> dict:
     return result
 
 
+def cli_summary(result: dict, report_path: str) -> dict:
+    """生成有界的 DOCX 预扫描 CLI 输出。
+
+    Args:
+        result (dict): ``prescan`` 返回的完整预扫描结果。
+        report_path (str): 完整 JSON 报告路径。
+
+    Returns:
+        dict: 计数、metadata 候选、少量结构预览和报告路径。
+    """
+    raw_preview = result.get("structure_preview", [])
+    preview = raw_preview if isinstance(raw_preview, list) else []
+    raw_candidates = result.get("metadata_candidates", {})
+    candidates = raw_candidates if isinstance(raw_candidates, dict) else {}
+    compact_candidates = {
+        key: block_summary(value, 240) if isinstance(value, str) else value
+        for key, value in candidates.items()
+    }
+    return {
+        "flow": result.get("flow"),
+        "gate": result.get("gate"),
+        "status": result.get("status"),
+        "docx": result.get("docx"),
+        "counts": result.get("counts", {}),
+        "metadata_candidates": compact_candidates,
+        "structure_preview_count": len(preview),
+        "structure_preview_examples": preview[:10],
+        "report_path": report_path,
+        "next_steps": result.get("next_steps", []),
+    }
+
+
 def main() -> int:
     """解析命令行参数并执行 DOCX 轻量预扫描。
 
     Returns:
         int: DOCX 可读且有文本时返回 0，否则返回 2。
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default=".")
-    parser.add_argument("--docx", default="workspace/input/thesis.docx")
-    parser.add_argument("--output", help="可选 JSON 输出路径。流程 A 不要输出到 thesis.json。")
+    parser = argparse.ArgumentParser(
+        description="轻量预扫描 DOCX，检查可读性并提取 metadata 和结构候选。"
+    )
+    parser.add_argument("--root", default=".", help="ZUFE-Thesis 模板根目录。")
+    parser.add_argument(
+        "--docx",
+        default="workspace/input/thesis.docx",
+        help="相对模板根目录的 DOCX 输入路径。",
+    )
+    parser.add_argument(
+        "--output",
+        default="workspace/intermediate/prescan.json",
+        help="完整预扫描 JSON 路径；不得指向正式 thesis.json。stdout 只输出有界摘要。",
+    )
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
     docx_path = (
@@ -319,15 +361,25 @@ def main() -> int:
         if not Path(args.docx).is_absolute()
         else Path(args.docx).resolve()
     )
-    result = prescan(root, docx_path)
-    if args.output:
-        output = (
-            (root / args.output).resolve()
-            if not Path(args.output).is_absolute()
-            else Path(args.output).resolve()
+    output = (
+        (root / args.output).resolve()
+        if not Path(args.output).is_absolute()
+        else Path(args.output).resolve()
+    )
+    if output == (root / "workspace/intermediate/thesis.json").resolve():
+        print_json(
+            {
+                "flow": "A",
+                "gate": "word_prescan",
+                "status": "blocked",
+                "error_code": "prescan_cannot_overwrite_thesis_json",
+                "detail": "预扫描结果不得覆盖流程 B 正式账本 thesis.json。",
+            }
         )
-        write_json(output, result)
-    print_json(result)
+        return 2
+    result = prescan(root, docx_path)
+    write_json(output, result)
+    print_json(cli_summary(result, rel(output, root)))
     return 0 if result["status"] == "passed" else 2
 
 

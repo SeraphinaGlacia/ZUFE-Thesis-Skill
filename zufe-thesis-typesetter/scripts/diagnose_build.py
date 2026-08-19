@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import argparse
 import re
+from collections import Counter
 from pathlib import Path
 
-from common import print_json, write_json
+from common import block_summary, print_json, write_json
 
 PATTERNS = [
     (
@@ -76,12 +77,18 @@ def classify(text: str) -> list[dict]:
         list[dict]: 已识别问题列表；包含类别、证据片段和下一步。
     """
     issues = []
+    seen = set()
     for category, pattern in PATTERNS:
         for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+            evidence = match.group(0)[:240]
+            identity = (category, evidence)
+            if identity in seen:
+                continue
+            seen.add(identity)
             issues.append(
                 {
                     "category": category,
-                    "evidence": match.group(0)[:240],
+                    "evidence": evidence,
                     "next_step": next_step(category),
                 }
             )
@@ -125,17 +132,51 @@ def diagnose(root: Path) -> dict:
     return result
 
 
+def cli_summary(result: dict) -> dict:
+    """生成有界的构建诊断 CLI 输出。
+
+    Args:
+        result (dict): ``diagnose`` 返回并写入文件的完整诊断结果。
+
+    Returns:
+        dict: 分类计数、少量证据示例和完整报告路径。
+    """
+    raw_issues = result.get("issues", [])
+    issues = raw_issues if isinstance(raw_issues, list) else []
+    counts = Counter(
+        str(issue.get("category") or "unknown") for issue in issues if isinstance(issue, dict)
+    )
+    return {
+        "flow": result.get("flow"),
+        "step": result.get("step"),
+        "status": result.get("status"),
+        "logs_checked": result.get("logs_checked", []),
+        "issue_count": len(issues),
+        "issue_counts_by_category": dict(sorted(counts.items())),
+        "issue_examples": [
+            {
+                "category": issue.get("category"),
+                "evidence": block_summary(str(issue.get("evidence") or ""), 160),
+                "next_step": issue.get("next_step"),
+            }
+            for issue in issues[:5]
+            if isinstance(issue, dict)
+        ],
+        "report_path": "workspace/output/diagnosis.json",
+    }
+
+
 def main() -> int:
     """解析命令行参数并输出构建诊断 JSON。
 
     Returns:
         int: 没有识别到问题时返回 0，否则返回 2。
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default=".")
+    parser = argparse.ArgumentParser(description="汇总 LaTeX/Biber 日志并分类为流程 C 可行动问题。")
+    parser.add_argument("--root", default=".", help="ZUFE-Thesis 模板根目录。")
     args = parser.parse_args()
     result = diagnose(Path(args.root).expanduser().resolve())
-    print_json(result)
+    print_json(cli_summary(result))
     return 0 if result["status"] == "passed" else 2
 
 

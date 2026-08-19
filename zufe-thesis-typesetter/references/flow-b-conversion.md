@@ -72,6 +72,28 @@ workspace/input/metadata.yaml
 脚本不得编造参考文献，不得静默丢弃表格、图片或公式，也不得在低置信度时擅自猜测章节归属。
 `render_bib.py` 采用全量确认后写入：只要存在空输入、未转换条目或未确认映射，就必须保留现有 `Reference.bib`，并让已确认块继续保持 `mapped`；所有条目解决后才可原子替换目标文件。
 
+优先使用只读账本命令获取所需证据，避免为了一个局部判断加载整个 `thesis.json`：
+
+```text
+python zufe-thesis-typesetter/scripts/ledger.py --root . summary
+python zufe-thesis-typesetter/scripts/ledger.py --root . pending --offset 0 --limit 20
+python zufe-thesis-typesetter/scripts/ledger.py --root . get p0001
+python zufe-thesis-typesetter/scripts/ledger.py --root . outline --offset 0 --limit 20
+```
+
+`summary` 用于总体状态，`pending` 用于分页处理，`get` 只展开一个源块，`outline` 把标题候选、Word 证据和相邻源块放在一起。只有这些有界结果不足以完成跨块判断时，才读取完整账本。
+
+## 标题的混合语义识别
+
+标题层级和编号含义属于语义判断，不能由脚本根据文本外观单独决定。脚本负责保留原文、Word 样式、字号和相邻位置等证据；Agent 必须结合全文结构判断标题是否成立、它是章、节还是小节，以及原文开头是否需要从渲染标题中去除。
+
+- 先用 `ledger.py pending` 分页处理全部源块并完成初步语义判断，再运行 `outline` 汇总脚本候选和 Agent 已标记标题，按源顺序结合前后文统一定级；不要只查看脚本候选，也不要逐个孤立定级。
+- 已确认标题写入 `semantic_role=heading`、`level=1/2/3` 和非空 `render_title`；若脚本候选实际是正文或列表，也要写入真实 `semantic_role` 明确否决候选。任一标题语义字段未完成时不得渲染。
+- `第一章 绪论`、`1.1 研究背景`、`一、研究设计` 等原文开头可能是人工编号，也可能属于标题内容。Agent 必须结合上下标题和正文逻辑决定 `render_title`，不得机械迎合编号外观。
+- 如果一个候选块只有 `第一章`、`1.1` 等编号而没有标题正文，必须结合相邻块确认是否属于被 Word 拆开的同一标题；不得生成空标题，也不得自行补写标题。
+- `render_chapters.py` 原样转义并渲染 `render_title`，不从原始 `text` 推断或删除编号。普通正文和列表不使用该字段。
+- 对 `第一章 绪论` 这类原文，若 `第一章` 确属人工编号，Agent 应写入 `render_title: "绪论"`；对 `3.14 是圆周率吗？` 这类语义标题，则应完整保留。
+
 ## 暂不支持特性报告
 
 `import_docx.py` 必须检测脚注、尾注、OMML 公式、超链接、批注、修订痕迹、文本框、内容控件、`altChunk` 外部导入内容、链接图片、Word 域、自动编号、图表/SmartArt、OLE 对象、页眉和页脚等暂不自动转换内容，并写入 `thesis.json.unsupported_features`。
@@ -101,6 +123,7 @@ workspace/input/metadata.yaml
 - image 源块必须记录 `evidence.docx_media_path`、锚点段落 ID、锚点文本摘要和锚点状态。
 - `export_assets.py` 只表示图片资源已复制到 `Images/word_media/`，应写入 `asset_status` 和 `asset_output`。
 - 资源已导出不等于语义位置已确认；不得仅因为图片文件导出成功就把 `status` 改成 `mapped`。
+- 图片 `caption` 只能来自 Word 图题证据或 Agent/用户确认；媒体路径和源块摘要不得自动充当图题。
 - 无法定位正文锚点的媒体仍要进入清点账本，并保持 `needs_confirmation`。
 - `export_assets.py` 必须先核对 `source_docx_fingerprint`；指纹缺失或变化时停止，避免正文和图片来自不同 Word 版本。
 
@@ -117,7 +140,7 @@ Word 里的 `图2.1`、`图 2.1`、`表1.2` 等编号常常是普通手写文本
 
 - Agent 必须检查正文中的手写图表编号，并根据上下文、相邻图片/表格、图题和原始顺序确认它对应的目标图表。
 - 已确认的图片或表格块必须写入稳定 `label`，例如 `fig:age-distribution`、`tab:sample-info`。同一工程内 label 不得重复。
-- 已确认的正文引用必须在段落块写入 `reference_rewrites`，把原文片段改写为 `图~\ref{...}` 或 `表~\ref{...}`。
+- 已确认的正文引用必须在段落块写入 `reference_rewrites`，显式提供 `target_kind` 或 `prefix`，再把原文片段改写为 `图~\ref{...}` 或 `表~\ref{...}`；类型缺失时脚本不得默认按图片处理。
 - 如果原 Word 图题编号已经重复、跳号或与正文不一致，优先相信语义和相邻证据，不把原编号当作事实。
 - 无法确认映射时，把相关正文块和图表块保持 `needs_confirmation` 或 `blocked`，不得为了通过编译而保留旧编号。
 - `check_flow_b_gate.py` 和流程 C QA 必须阻止章节源码中残留的手写 `图x.y` / `表x.y`。
@@ -182,6 +205,7 @@ Word 段落中上标、下标是可见格式，属于必须保留的内容证据
 - 没有图片、表格、公式或参考文献处于已抽取但未放置状态。
 - 没有 Word 上标/下标处于已抽取但未保留格式状态。
 - 没有正文手写图表编号残留；所有确认过的图表引用都已改写为 LaTeX `\ref`。
+- 所有标题候选均已结合全文逻辑确认 `semantic_role`、`level` 和 `render_title`，且原始 `text` 未因去编号而改写。
 - 没有重复 label 或缺失 label 目标的 LaTeX 引用。
 - 没有默认表格被无条件整体缩放到 `\textwidth`。
 - 摘要和关键词冲突已解决。

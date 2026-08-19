@@ -6,17 +6,22 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from collections import Counter
 from pathlib import Path, PurePosixPath
 
 from common import (
     FINAL_BLOCK_STATES,
     active_chapter_files,
+    block_summary,
     file_fingerprint,
+    heading_contract_issues,
     latex_label_reference_issues,
     manual_cross_reference_hits,
     print_json,
     read_json,
+    rel,
     safe_resolve_under,
+    write_json,
 )
 
 ACCEPTED_UNSUPPORTED_FEATURE_STATUSES = {"accepted_with_warning", "confirmed", "resolved"}
@@ -104,6 +109,77 @@ def ledger_schema_issues(thesis: dict) -> list[dict]:
         source_type = block.get("source_type")
         if isinstance(source_type, str) and source_type in source_type_counts:
             source_type_counts[source_type] += 1
+
+        label = str(block.get("label") or block.get("latex_label") or "").strip()
+        caption = str(block.get("caption") or "").strip()
+        if (
+            isinstance(source_type, str)
+            and source_type in {"image", "table"}
+            and not block.get("latex")
+            and label
+            and not caption
+        ):
+            issues.append(
+                {
+                    "check": "labeled_float_caption",
+                    "block_id": block_id,
+                    "detail": "带 label 的图片或表格必须先有明确 caption，不能让 label 绑定到错误编号。",
+                }
+            )
+
+        rewrites = block.get("reference_rewrites")
+        if rewrites is not None and not isinstance(rewrites, list):
+            issues.append(
+                {
+                    "check": "reference_rewrites_type",
+                    "block_id": block_id,
+                    "detail": "reference_rewrites 必须是列表。",
+                }
+            )
+        elif isinstance(rewrites, list):
+            for rewrite_index, rewrite in enumerate(rewrites):
+                if not isinstance(rewrite, dict):
+                    issues.append(
+                        {
+                            "check": "reference_rewrite_type",
+                            "block_id": block_id,
+                            "rewrite_index": rewrite_index,
+                            "detail": "reference_rewrites 条目必须是对象。",
+                        }
+                    )
+                    continue
+                source = (
+                    rewrite.get("source_text")
+                    or rewrite.get("original_text")
+                    or rewrite.get("text")
+                )
+                raw_latex = rewrite.get("latex") or rewrite.get("replacement_latex")
+                target_label = rewrite.get("target_label") or rewrite.get("label")
+                target_kind = (
+                    rewrite.get("prefix")
+                    or rewrite.get("target_kind")
+                    or rewrite.get("kind")
+                    or rewrite.get("type")
+                )
+                missing = []
+                if not source:
+                    missing.append("source_text")
+                if not raw_latex and not target_label:
+                    missing.append("target_label")
+                if not raw_latex and not target_kind:
+                    missing.append("target_kind_or_prefix")
+                if missing:
+                    issues.append(
+                        {
+                            "check": "reference_rewrite_fields",
+                            "block_id": block_id,
+                            "rewrite_index": rewrite_index,
+                            "missing_fields": missing,
+                            "detail": "引用改写缺少确定性字段；脚本不会猜测引用对象或类型。",
+                        }
+                    )
+
+    issues.extend(heading_contract_issues(blocks))
 
     counts = thesis.get("counts", {})
     if not isinstance(counts, dict):
@@ -610,15 +686,62 @@ def check(root: Path, thesis_path: Path) -> dict:
     }
 
 
+def cli_summary(result: dict, report_path: str) -> dict:
+    """生成有界的流程 B 门禁 CLI 输出。
+
+    Args:
+        result (dict): ``check`` 返回的完整门禁结果。
+        report_path (str): 完整 JSON 报告路径。
+
+    Returns:
+        dict: 状态、问题分类计数、少量示例和报告路径。
+    """
+    raw_issues = result.get("issues", [])
+    issues = raw_issues if isinstance(raw_issues, list) else []
+    counts = Counter(
+        str(issue.get("check") or "unknown") for issue in issues if isinstance(issue, dict)
+    )
+    return {
+        "flow": result.get("flow"),
+        "gate": result.get("gate"),
+        "status": result.get("status"),
+        "issue_count": len(issues),
+        "issue_counts_by_check": dict(sorted(counts.items())),
+        "issue_examples": [
+            {
+                "check": issue.get("check"),
+                "block_id": issue.get("block_id"),
+                "target": issue.get("target"),
+                "detail": block_summary(str(issue.get("detail") or ""), 160),
+            }
+            for issue in issues[:5]
+            if isinstance(issue, dict)
+        ],
+        "report_path": report_path,
+        "next_steps": result.get("next_steps", []),
+    }
+
+
 def main() -> int:
     """解析命令行参数并输出流程 B 完成门禁结果。
 
     Returns:
         int: 门禁通过时返回 0，否则返回 2。
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default=".")
-    parser.add_argument("--thesis-json", default="workspace/intermediate/thesis.json")
+    parser = argparse.ArgumentParser(
+        description="检查流程 B 账本、渲染证据和章节源码是否可以进入流程 C。"
+    )
+    parser.add_argument("--root", default=".", help="ZUFE-Thesis 模板根目录。")
+    parser.add_argument(
+        "--thesis-json",
+        default="workspace/intermediate/thesis.json",
+        help="相对模板根目录的流程 B 账本路径。",
+    )
+    parser.add_argument(
+        "--output",
+        default="workspace/output/flow_b_gate.json",
+        help="完整门禁结果 JSON 路径。stdout 只输出有界摘要。",
+    )
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
     thesis_path = (
@@ -627,7 +750,13 @@ def main() -> int:
         else Path(args.thesis_json).resolve()
     )
     result = check(root, thesis_path)
-    print_json(result)
+    output = (
+        (root / args.output).resolve()
+        if not Path(args.output).is_absolute()
+        else Path(args.output).resolve()
+    )
+    write_json(output, result)
+    print_json(cli_summary(result, rel(output, root)))
     return 0 if result["status"] == "passed" else 2
 
 
