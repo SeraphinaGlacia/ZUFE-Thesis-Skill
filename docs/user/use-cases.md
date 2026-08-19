@@ -47,14 +47,14 @@ ZUFE-Thesis-Skill 是一个配合 ZUFE-Thesis LaTeX 模板使用的非官方辅�
 1. 先用 Word 写好论文或报告初稿，并保存为 `.docx`。
 2. 准备完整的 ZUFE-Thesis 模板项目。
 3. 在 Kimi Work、Codex 或类似 Agent 工具中打开这个模板项目。
-4. 在同一个工作区安装 ZUFE-Thesis-Skill。
+4. 全局或项目级安装 ZUFE-Thesis-Skill，并确认 Agent 已经读取该 Skill。
 5. 让 Agent 检查模板、环境、输入文档和元数据。
 6. 由 Skill 辅助把 Word 内容转换为 LaTeX 工程，并编译生成 PDF。
 7. 用户检查生成的 PDF、转换报告和质检报告，再根据需要继续修改。
 
 ## GitHub 与 Gitee 访问说明
 
-本项目的 Skill 安装路径以项目 README 和 release 页面为准。用户通常通过 `npx skills add SeraphinaGlacia/ZUFE-Thesis-Skill` 安装本 Skill，也可以使用 release 中的 ZIP 包进行手动安装。
+本项目的 Skill 安装路径以项目 README 和 release 页面为准。用户通常通过 `npx skills add SeraphinaGlacia/ZUFE-Thesis-Skill --skill zufe-thesis-typesetter --global` 安装本 Skill，也可以从 `https://zufe-thesis-skill.glacia.fun/zufe-thesis-typesetter-latest.zip` 获取最新 ZIP，并使用客户端支持的本地导入方式安装。
 
 本项目依赖完整的 ZUFE-Thesis 原始模板工作区。模板优先使用 GitHub 仓库：
 

@@ -45,13 +45,13 @@ ZUFE-Thesis-Skill 是围绕这个模板制作的辅助 Skill，负责引导 Agen
 - 一份完整的 ZUFE-Thesis 模板项目。
 - 一个可以运行 Agent Skill 的工具环境，例如 Kimi Work、Codex 或类似工具。
 
-本 Skill 需要和完整的模板项目放在同一个工作区中使用。
+本 Skill 可以全局或项目级安装，但执行转换时必须把完整的 ZUFE-Thesis 模板项目作为当前工作区。
 
 ## 这个 Skill 怎么安装？
 
-通常推荐通过项目 README 中的 `npx skills add SeraphinaGlacia/ZUFE-Thesis-Skill` 安装。
+通常推荐通过项目 README 中的 `npx skills add SeraphinaGlacia/ZUFE-Thesis-Skill --skill zufe-thesis-typesetter --global` 安装。
 
-如果无法使用 `npx` 或网络环境不稳定，可以查看项目 release 中是否提供 ZIP 包，并按 README 的说明手动安装。无论采用哪种方式，最终都应保证 `zufe-thesis-typesetter/` 这个 Skill 包被安装到 Agent 能识别的位置。
+如果无法使用 `npx` 或网络环境不稳定，可以从 `https://zufe-thesis-skill.glacia.fun/zufe-thesis-typesetter-latest.zip` 获取最新 ZIP，并按 README 的说明手动安装。无论采用哪种方式，最终都应保证 `zufe-thesis-typesetter/` 这个 Skill 包被安装到 Agent 能识别的位置。
 
 ## 使用后会得到哪些文件？
 

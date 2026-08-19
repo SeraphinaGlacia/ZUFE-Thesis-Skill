@@ -108,11 +108,10 @@
 
 确认能力满足后，请按下面的顺序进行：
 
-1. 先帮我准备或定位一个完整的 ZUFE-Thesis 模板项目。优先使用 https://gitee.com/cwf818/ZUFE-Thesis。不要把 Skill 仓库误当成 LaTeX 模板。
-2. 以全局级安装当前 Agent Skill https://github.com/SeraphinaGlacia/ZUFE-Thesis-Skill。优先尝试运行：`npx skills add SeraphinaGlacia/ZUFE-Thesis-Skill`
-3. 如果当前客户端不支持 npx 安装，改为从 https://zufe-thesis-skill.glacia.fun/zufe-thesis-typesetter-latest.zip 获取最新 ZIP，并使用客户端支持的本地 Skill 导入方式进行全局安装。如果这些方式都不可用，请说明具体阻碍并让我提供 ZIP，不要自行编造或重写这个 Skill。
-4. 安装后，确认客户端能够识别 zufe-thesis-typesetter，并读取其中的 SKILL.md；同时确认当前工作目录确实是完整的 ZUFE-Thesis 模板根目录。
-5. 接着告诉我应该把 .docx 文件放在哪里，并按 Skill 规定的流程检查模板、环境和输入，再进行转换、编译和质量检查。
+1. 全局安装当前 Agent Skill https://github.com/SeraphinaGlacia/ZUFE-Thesis-Skill。优先尝试运行：`npx skills add SeraphinaGlacia/ZUFE-Thesis-Skill -g`
+2. 如果当前客户端不支持 npx 安装，改为从 https://zufe-thesis-skill.glacia.fun/zufe-thesis-typesetter-latest.zip 获取最新 ZIP，并使用客户端支持的本地 Skill 导入方式进行全局安装。如果这些方式都不可用，请说明具体阻碍并让我提供 ZIP，不要自行编造或重写这个 Skill。
+3. 安装后，确认客户端能够识别 zufe-thesis-typesetter，并实际读取其 SKILL.md，确认可以正常调用。
+4. 调用目标 Skill，为我介绍其工作流程，并先按流程 A 准备或定位完整的 ZUFE-Thesis 模板根目录、确认工作区和输入，再继续转换作业。
 
 现在请开始任务！
 ```
@@ -128,15 +127,12 @@
 
 2. 在 Kimi Work / Codex Desktop 等工具中打开这个完整的 ZUFE-Thesis 模板项目。
 
-3. 然后，在目标工作区安装本 Skill：
+3. 然后，根据客户端支持情况全局或项目级安装本 Skill。推荐全局安装，方便以后在不同模板工作区中复用：
 
    ```bash
-   # 推荐使用 npx skills add 命令
-   npx skills add SeraphinaGlacia/ZUFE-Thesis-Skill
+   # 推荐使用 npx skills add 全局安装
+   npx skills add SeraphinaGlacia/ZUFE-Thesis-Skill -g
    ```
-
-> [!WARNING]
-> 本 Skill 需要与模板项目存在于同一个工作区，请务必保证在已有的模板项目库中安装本 Skill，否则其将无法正常工作。
 
 4. 将 Word 同样存放于工作区中，准备好后，直接在对话中说明你的目标，例如：
 
@@ -195,6 +191,7 @@ zufe-thesis-typesetter/
 │   ├── diagnose_build.py               # 编译诊断
 │   ├── export_assets.py                # 资源导出脚本
 │   ├── import_docx.py                  # DOCX 抽取脚本
+│   ├── ledger.py                       # 内容账本查询脚本
 │   ├── prepare_workspace.py            # 工作区准备脚本
 │   ├── prescan_docx.py                 # DOCX 预扫描脚本
 │   ├── qa.py                           # 质量检查脚本

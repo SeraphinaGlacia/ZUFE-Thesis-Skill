@@ -4,6 +4,7 @@
 
 - `zufe-thesis-typesetter/`：可安装的 Skill 包，包含 `SKILL.md`、脚本、参考文档、测试和示例 metadata。
 - `docs/overview/`：项目总览和仓库结构说明。
+- `docs/user/`：普通用户适用场景和常见问题。
 - `docs/design/`：开发期工作流说明和 Skill 内部执行设计。
 - `docs/archive/`：早期工作流设计记录。
 - `docs/essays/`：项目愿景、设计初衷和面向读者的背景说明。
@@ -14,7 +15,7 @@
 
 ### 基本目标
 
-开发并维护一个面向 ZUFE-Thesis 模板的 Agent Skill。用户在完整的 ZUFE-Thesis 模板项目中安装本 Skill 后，可以通过 Kimi Work、Codex 等 Agent 工具，把 Word 初稿转换为 LaTeX 工程并生成 PDF。
+开发并维护一个面向 ZUFE-Thesis 模板的 Agent Skill。用户可以全局或项目级安装本 Skill，并在完整的 ZUFE-Thesis 模板项目中运行，通过 Kimi Work、Codex 等 Agent 工具，把 Word 初稿转换为 LaTeX 工程并生成 PDF。
 
 这个项目的重点不是替代原始 LaTeX 模板，而是在模板基础上补充 AI 入口层：让不熟悉 LaTeX 的用户也能通过对话完成格式整理、模板写入、编译和质检。
 

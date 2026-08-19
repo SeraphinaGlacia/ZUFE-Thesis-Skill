@@ -39,7 +39,8 @@ flowchart TD
         refB --> importDocx["import_docx.py"]
         importDocx --> schema["必要时读取 references/thesis-json-schema.md"]
         schema --> exportAssets["export_assets.py"]
-        exportAssets --> semanticConfirm["Agent 处理语义映射和用户确认"]
+        exportAssets --> ledger["ledger.py<br/>摘要、分页与标题上下文"]
+        ledger --> semanticConfirm["Agent 处理语义映射和用户确认"]
         semanticConfirm --> renderBasicinfo["render_basicinfo.py"]
         semanticConfirm --> renderChapters["render_chapters.py"]
         semanticConfirm --> renderBib["render_bib.py"]
@@ -85,12 +86,12 @@ flowchart LR
     sourceWord["用户提供的 Word"] --> prepareWorkspace2["prepare_workspace.py"]
     checkTemplate2 --> prepareWorkspace2
     prepareWorkspace2 --> docx["workspace/input/thesis.docx"]
-    prepareWorkspace2 --> meta["workspace/input/metadata.yaml"]
 
     checkEnvMin2["check_env.py<br/>--stage minimal"] --> prescan2["prescan_docx.py"]
     docx --> prescan2
     prescan2 --> candidates["metadata 候选"]
-    candidates --> meta
+    candidates --> metadataConfirm2["Agent / 用户确认 metadata"]
+    metadataConfirm2 --> meta["workspace/input/metadata.yaml"]
 
     checkEnvLatex2["check_env.py<br/>--stage latex/all"] --> build2["build.py"]
 
@@ -101,6 +102,10 @@ flowchart LR
     json --> export2["export_assets.py<br/>先核对源文件指纹"]
     export2 --> images["Images/word_media/"]
     export2 --> json
+
+    json --> ledger2["ledger.py<br/>只读摘要、分页与标题上下文"]
+    ledger2 --> semanticMap2["Agent 语义映射和用户确认"]
+    semanticMap2 --> json
 
     json --> basicinfo2["render_basicinfo.py"]
     meta --> basicinfo2
@@ -158,6 +163,22 @@ flowchart LR
 | `flow-c-export-and-qa.md` | 编译、诊断、QA 前 | 如何生成新 PDF，如何分类失败，如何判断交付状态 |
 
 读取 `references/` 可以给每个阶段建立边界，这也就是为什么 A/B/C 三个流程存放在三个不同的文件里。每个流程不能越界，例如：流程 A 不做转换，流程 B 不安装环境和编译，流程 C 不重新判断语义。
+
+## CLI 调用约定
+
+当前没有统一的 `zufe-thesis` 控制台入口。除 `common.py` 外，每个脚本都是可直接调用的轻量 CLI，并支持 `-h` 或 `--help`。
+
+- `<skill-root>` 表示当前已加载的 `SKILL.md` 所在目录，用于定位脚本。
+- `<template-root>` 表示完整的 ZUFE-Thesis 模板根目录，传给 `--root`。
+- Skill 可以全局或项目级安装；不要假定 `<skill-root>` 位于 `<template-root>` 内。
+
+```bash
+python "<skill-root>/scripts/check_template.py" --root "<template-root>"
+python "<skill-root>/scripts/check_env.py" --root "<template-root>" --stage minimal
+python "<skill-root>/scripts/ledger.py" --root "<template-root>" --help
+```
+
+脚本通过 stdout JSON、完整 JSON 报告和标准工作区文件传递状态。退出码用于判断命令是否阻塞，但 Agent 仍须读取 JSON 中的 `status`；例如 `qa.py` 的 `needs_review` 不等于执行失败。
 
 ## scripts 调用顺序
 
