@@ -7,7 +7,7 @@ description: 当用户需要使用 ZUFE-Thesis 模板处理 Word 论文或报告
 
 ## 总览
 
-使用此 skill 将 Word 论文转换为 ZUFE-Thesis LaTeX/PDF 交付物。严格按三个流程推进：
+使用此 Skill 将 Word 论文转换为 ZUFE-Thesis LaTeX/PDF 交付物。严格按三个流程推进：
 
 - **流程 A**：严格门禁与智能预准备。
 - **流程 B**：DOCX 正式抽取、内容清点账本、语义确认与模板写入。
@@ -57,7 +57,16 @@ workspace/output/qa_report.md
 2. **流程 B**：把 Word 每个可见或可抽取内容块写入 `thesis.json`；Agent 负责分配语义槽位并向用户确认低置信度内容；脚本只渲染已确认映射。
 3. **流程 C**：再次确认流程 B 门禁和输入指纹，归档旧编译产物，运行 `xelatex -> biber -> xelatex -> xelatex`，诊断失败，做有限机械修复，并质检新 PDF。
 
-## 脚本使用
+## 详细参考（`references/`）
+
+- 做流程 A 前，读取 `references/flow-a-gatekeeping.md`。
+- 做环境判断或修复时，先读取 `references/environment-sop.md`。
+- 只有需要平台命令、安装细节、PATH 修复或 TeX 包补装时，才读取 `references/environment-setup-and-repair.md`。
+- 做流程 B 抽取或渲染前，读取 `references/flow-b-conversion.md`。
+- 做流程 C 编译或 QA 前，读取 `references/flow-c-export-and-qa.md`。
+- 手动编辑 `thesis.json` 前，读取 `references/thesis-json-schema.md`。
+
+## 脚本使用（`scripts/`）
 
 所有可执行脚本接受 `--root`，并输出 JSON 或写入 JSON 报告。先以当前已加载的 `SKILL.md` 所在目录作为 Skill 根目录，从该目录解析 `scripts/`，再把完整的 ZUFE-Thesis 模板根目录传给 `--root`；不要假定 Skill 文件夹位于模板工作区内。高数据量命令的 stdout 只给有界摘要和完整报告路径；Agent 先读摘要，只在需要具体证据时分页查询或读取报告。正常执行优先使用已文档化的 CLI，只有调试或维护脚本时才读取源码。
 
@@ -87,7 +96,9 @@ Agent 负责语义判断，脚本不得替代：
 - 不从文件名猜测学院、专业、日期、导师或报告类型；metadata 只能来自 Word 证据或用户确认。
 - 不把 run 级样式问题当成普通文本问题忽略；上标、下标、表格字号异常都必须在流程 B/C 暴露。
 - 流程 C 不修正文档语义；内容归属错误必须退回流程 B。
-- 标题识别必须混合使用脚本候选、Word 样式、原文编号、相邻段落和全文层级；脚本候选和编号外观只能提供线索，不能单独决定标题语义、层级或删改内容。
+- 处理标题前，先通读全文并根据内容关系重建完整大纲；不能仅凭段落样式、编号外观或局部上下文逐段猜测标题及其层级。
+- 对每个标题判断它是否属于真正的文章结构，并检查上下级关系、同级并列关系和出现顺序是否连贯；脚本候选、Word 样式和原文编号只能提供线索，不能替代语义判断。
+- 区分标题正文与原文手写编号。确认 `第一章`、`1.1`、`一、` 等内容只是人工编号后，从最终标题文字中去除，只保留标题正文，再由 LaTeX 按已经确认的层级自动编号；不得让原文编号与 LaTeX 编号同时出现。
 
 ## 转换质量硬约束
 
@@ -102,23 +113,13 @@ Agent 负责语义判断，脚本不得替代：
 - 只有表格自然宽度确实超过版心且没有更稳妥的列宽方案时，才允许缩小表格；禁止为了“填满版心”放大表格。
 - 脚注、尾注、公式、超链接、批注、修订痕迹、文本框、内容控件、外部导入内容、链接图片、Word 域/自动编号、图表/SmartArt、OLE 对象和页眉页脚等暂不自动转换内容必须进入 `unsupported_features`，不得静默忽略。
 
-## 已验证问题清单
+## 踩坑清单
 
-- **标题编号重复**：Agent 必须保留原始 `text`，结合语义判断原文开头是否属于人工编号，并为每个标题显式写入 `render_title`。脚本只校验并原样渲染该字段，不得用正则自动删除 `第一章`、`1.1`、`一、` 等外观相似文本。
-- **标题层级误判**：Agent 必须先按源顺序查看全部标题候选及其前后文，再统一确认 `semantic_role=heading`、`level=1/2/3` 和 `render_title`。标题块只有编号、正文位于相邻块时必须先确认是否合并。
-- **图片题注误填**：图片媒体路径和源块摘要不得自动充当图题；`caption` 只能来自 Word 证据或 Agent/用户确认。
-- **引用类型误判**：`reference_rewrites` 必须显式写入 `target_kind` 或 `prefix`；类型缺失时不得默认按图片引用生成 `图~\ref{...}`。
+- 标题编号重复与层级误判：这是全文语义理解问题，不能交给正则或其他机械规则裁决。Agent 必须先结合全文内容、标题候选及其前后文重新整理文章结构，统一确认哪些内容是真正的标题以及各自层级，再识别并去除标题中已有的手写编号。写入 LaTeX 后，还要复核最终大纲和编号是否连续、是否与文章逻辑一致；仍有歧义时向用户确认。
+- 图片题注误填：图片媒体路径和源块摘要不得自动充当图题；`caption` 只能来自 Word 证据或 Agent/用户确认。
+- 引用类型误判：`reference_rewrites` 必须显式写入 `target_kind` 或 `prefix`；类型缺失时不得默认按图片引用生成 `图~\ref{...}`。
 
-## 详细参考
-
-- 做流程 A 前，读取 `references/flow-a-gatekeeping.md`。
-- 做环境判断或修复时，先读取 `references/environment-sop.md`。
-- 只有需要平台命令、安装细节、PATH 修复或 TeX 包补装时，才读取 `references/environment-setup-and-repair.md`。
-- 做流程 B 抽取或渲染前，读取 `references/flow-b-conversion.md`。
-- 做流程 C 编译或 QA 前，读取 `references/flow-c-export-and-qa.md`。
-- 手动编辑 `thesis.json` 前，读取 `references/thesis-json-schema.md`。
-
-## 用户反馈
+## 人机协作
 
 非技术用户不需要先打开报告。先在对话中给出：
 
