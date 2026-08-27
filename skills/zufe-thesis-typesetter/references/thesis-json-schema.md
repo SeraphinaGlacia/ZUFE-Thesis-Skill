@@ -23,6 +23,11 @@
       "table": 0,
       "image": 0
     },
+    "converted_inline_features": {
+      "equations": 0,
+      "footnotes": 0,
+      "hyperlinks": 0
+    },
     "unsupported_features": 0
   },
   "metadata_candidates": {},
@@ -118,6 +123,8 @@
 
 `level` 只允许 `1`、`2`、`3`，分别对应 `\chapter`、`\section`、`\subsection`。若 `candidate_type=heading` 实际是正文、列表或其他内容，Agent 应写入真实 `semantic_role` 明确否决候选，而不是给它强行分配标题层级。原文完整保留在 `text` 作为审计证据；Agent 结合全文语义决定最终标题并写入非空 `render_title`，`render_chapters.py` 只负责原样转义和渲染。标题候选缺少语义结论，或已确认标题缺少 `level`、`render_title` 时，流程 B 必须阻塞。
 
+结构判断采用 preserve-first。若最终判断涉及正文与标题互转、改变标题层级所表达的章节从属，或把内容移入不同章节，必须保持 `requires_confirmation=true`，并在用户确认后通过 `confirmation.note` 记录原始判断、最终判断、全文证据和调整理由。仅去除已经确认的手写标题编号属于格式规范化；编号是否属于标题正文仍有歧义时同样需要确认。
+
 使用 `scripts/ledger.py outline` 分页查看标题候选、Word 证据和相邻源块；使用 `get <block_id>` 时才展开单个完整源块。
 
 ## 源 DOCX 完整性
@@ -152,6 +159,40 @@
 - 若 `runs[].superscript=true`，渲染结果必须保留视觉上标，例如 `\textsuperscript{1}`。
 - 若上标数字实际是参考文献标号，Agent 可以在确认映射后改成引用命令；未确认前不得压平成普通数字。
 
+## 内联语义结构
+
+`runs` 同时按原文顺序保存普通文本和已识别的内联语义。普通文本 run 为兼容既有账本可省略 `kind`；特殊项使用 `kind=hyperlink/footnote/equation`，并通过 `conversion_status` 说明能否确定性渲染。表格单元格对应内容保存在 `table.inline_rows`，层级依次为行、单元格、段落和内联条目。
+
+```json
+[
+  {
+    "kind": "hyperlink",
+    "text": "项目主页",
+    "url": "https://example.com",
+    "runs": [{"text": "项目主页", "bold": false}],
+    "conversion_status": "converted"
+  },
+  {
+    "kind": "footnote",
+    "note_id": "2",
+    "text": "脚注正文",
+    "content": [[{"text": "脚注正文", "italic": false}]],
+    "conversion_status": "converted"
+  },
+  {
+    "kind": "equation",
+    "source_format": "omml",
+    "display": false,
+    "latex": "\\frac{a}{b}",
+    "conversion_status": "converted"
+  }
+]
+```
+
+当前自动范围包括目标明确的 `http`/`https`/`mailto` 外部超链接、仅含可承接内联内容的普通脚注，以及公式编辑器生成且转换器能够完整识别的原生 OMML 公式。内部书签跳转、表格单元格脚注、未知 OMML 节点、图片/墨迹公式和 MathType/OLE 公式仍需确认。
+
+自动转换失败的特殊项保持 `conversion_status=needs_confirmation`，并同步写入 `unsupported_features`。Agent 完成人工核对或补写后，可把该内联项改为 `conversion_status=resolved` 并提供非空 `latex`；只修改 `unsupported_features[].status` 不能绕过流程 B 门禁。
+
 ## 英文内容决策
 
 如果英文摘要或英文关键词缺失，必须在渲染 `chapters/basicinfo.tex` 前记录用户选择：
@@ -176,18 +217,22 @@
 
 ```json
 {
-  "type": "equation_omml",
+  "type": "unconverted_equation",
   "count": 1,
   "severity": "high",
   "status": "needs_confirmation",
-  "summary": "检测到 Word OMML 公式，第一版不会自动转换公式。",
+  "summary": "检测到无法完整转换的 Word 原生 OMML 公式，必须人工确认。",
   "locations": [
-    {"part": "word/document.xml", "count": 1}
+    {
+      "part": "word/document.xml",
+      "block_id": "p0004",
+      "detail": "OMML 含未支持节点：customNode"
+    }
   ]
 }
 ```
 
-`status=needs_confirmation` 会阻止流程 B 完成。用户确认风险或完成补救后，可改为 `accepted_with_warning`、`confirmed` 或 `resolved`。
+`status=needs_confirmation` 会阻止流程 B 完成。用户确认风险或完成补救后，可改为 `accepted_with_warning`、`confirmed` 或 `resolved`；若风险同时对应源块中的内联条目，还必须按上节完成该条目的显式处理。
 
 内容控件中的顶层可见段落和表格会尽量进入 `source_blocks`，并在 `evidence.container_path` 留下位置证据；但内容控件仍可能包含条件、隐藏或重复内容，因此 `content_control` 默认继续要求确认。`alt_chunk` 外部导入内容不做自动展开。
 

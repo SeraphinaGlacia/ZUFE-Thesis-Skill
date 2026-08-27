@@ -14,7 +14,7 @@
 6. 输出目录保护：检查旧输出，避免覆盖。
 7. LaTeX/Biber 环境检查：按 `environment-sop.md` 运行 `check_env.py --stage latex`，确认后续生成和编译链可用。
 
-环境判断先读 `zufe-thesis-typesetter/references/environment-sop.md`。只有需要平台命令、安装细节、PATH 修复或 TeX 包补装时，才读取 `environment-setup-and-repair.md`。
+环境判断先读 `skills/zufe-thesis-typesetter/references/environment-sop.md`。只有需要平台命令、安装细节、PATH 修复或 TeX 包补装时，才读取 `environment-setup-and-repair.md`。
 
 ## A.2 模板签名检查
 

@@ -1,6 +1,6 @@
 # ZUFE Thesis Skill 工作流设计
 
-本文档保留开发期用户侧 A/B/C 工作流总览。当前可执行 Skill 的运行时约束以 `zufe-thesis-typesetter/SKILL.md` 和 `zufe-thesis-typesetter/references/` 为准；`docs/archive/early-workflows/` 用于记录早期设计演进和维护背景。
+本文档保留开发期用户侧 A/B/C 工作流总览。当前可执行 Skill 的运行时约束以 `skills/zufe-thesis-typesetter/SKILL.md` 和 `skills/zufe-thesis-typesetter/references/` 为准；`docs/archive/early-workflows/` 用于记录早期设计演进和维护背景。
 
 如果需要理解 Skill 包内部如何调动 `SKILL.md`、`references/`、`scripts/` 和 `tests/`，先读 `docs/design/internal-execution.md`。
 

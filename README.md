@@ -157,7 +157,7 @@ Agent 会按流程检查模板、环境、输入文件和元数据，并开始�
 
 - 转换前会先做门禁检查，确认当前目录确实是 ZUFE-Thesis 模板项目，且环境配置正确。
 - 遇到 Word 中无法确认的内容（章节、摘要、关键词、参考文献、图表标题等），会进入确认流程，等待用户确认。
-- 不静默丢弃暂不支持的内容，例如脚注、批注、文本框等。
+- 不静默丢弃无法可靠转换的内容，例如批注、修订痕迹、文本框以及超出当前转换范围的脚注或公式。
 - 编译后会生成质检报告，说明 PDF 质量校验结果、是否还有模板残留或占位符。
 
 > [!TIP]
@@ -166,7 +166,7 @@ Agent 会按流程检查模板、环境、输入文件和元数据，并开始�
 ## 八、Skill 文件结构
 
 <details>
-<summary>展开查看 <code>zufe-thesis-typesetter</code> 文件结构</summary>
+<summary>展开查看 <code>zufe-thesis-typesetter</code> 安装包结构</summary>
 
 ```text
 zufe-thesis-typesetter/
@@ -192,16 +192,16 @@ zufe-thesis-typesetter/
 │   ├── export_assets.py                # 资源导出脚本
 │   ├── import_docx.py                  # DOCX 抽取脚本
 │   ├── ledger.py                       # 内容账本查询脚本
+│   ├── omml_to_latex.py                # Word 原生公式转换模块
 │   ├── prepare_workspace.py            # 工作区准备脚本
 │   ├── prescan_docx.py                 # DOCX 预扫描脚本
 │   ├── qa.py                           # 质量检查脚本
 │   ├── render_basicinfo.py             # 基础信息渲染脚本
 │   ├── render_bib.py                   # 参考文献渲染脚本
 │   └── render_chapters.py              # 章节渲染脚本
-└── tests/
-    ├── test_regressions.py             # 回归测试脚本
-    └── test_render_chapters.py         # 渲染测试脚本
 ```
+
+仓库中的 Skill 源目录位于 `skills/zufe-thesis-typesetter/`；维护用测试位于仓库根目录 `tests/`，不会进入安装包。
 
 </details>
 

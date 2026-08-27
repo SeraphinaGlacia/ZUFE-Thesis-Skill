@@ -6,8 +6,10 @@ from __future__ import annotations
 import argparse
 import xml.etree.ElementTree as ET
 import zipfile
-from pathlib import Path
+from collections import Counter, defaultdict
+from pathlib import Path, PurePosixPath
 from typing import Any
+from urllib.parse import urlsplit
 
 from common import (
     block_summary,
@@ -18,19 +20,29 @@ from common import (
     rel,
     write_json,
 )
+from omml_to_latex import convert_omml
 from prescan_docx import metadata_candidates
 
+PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 UNSUPPORTED_FEATURES = {
-    "footnote_or_endnote": {
+    "endnote": {
         "severity": "high",
-        "summary": "检测到脚注或尾注，第一版不会自动转换脚注/尾注内容。",
+        "summary": "检测到尾注；当前版本不会自动把尾注改写为 LaTeX 注释结构。",
     },
-    "equation_omml": {
+    "unconverted_footnote": {
         "severity": "high",
-        "summary": "检测到 Word OMML 公式，第一版不会自动转换公式。",
+        "summary": "检测到无法完整转换的脚注，必须人工确认或补写。",
+    },
+    "unconverted_equation": {
+        "severity": "high",
+        "summary": "检测到无法完整转换的 Word 原生 OMML 公式，必须人工确认。",
+    },
+    "unconverted_hyperlink": {
+        "severity": "medium",
+        "summary": "检测到目标缺失、内部跳转或协议不受支持的超链接，必须确认。",
     },
     "textbox": {
         "severity": "high",
@@ -43,10 +55,6 @@ UNSUPPORTED_FEATURES = {
     "comment": {
         "severity": "medium",
         "summary": "检测到批注，第一版不会把批注写入论文正文。",
-    },
-    "hyperlink": {
-        "severity": "medium",
-        "summary": "检测到超链接，第一版只保留可抽取文本，链接目标需要确认。",
     },
     "header_footer": {
         "severity": "medium",
@@ -83,6 +91,63 @@ UNSUPPORTED_FEATURES = {
 }
 
 TRANSPARENT_BODY_CONTAINERS = {"sdt", "sdtContent", "customXml", "smartTag"}
+TRANSPARENT_INLINE_CONTAINERS = {
+    "bdo",
+    "customXml",
+    "dir",
+    "fldSimple",
+    "sdt",
+    "sdtContent",
+    "smartTag",
+}
+SUPPORTED_HYPERLINK_SCHEMES = {"http", "https", "mailto"}
+
+
+class InlineFeatureTracker:
+    """记录已转换内联语义和无法自动完成的条目。"""
+
+    def __init__(self) -> None:
+        self.converted: Counter[str] = Counter()
+        self.issues: list[dict] = []
+
+    def record_converted(self, feature_type: str) -> None:
+        """记录一处确定性转换成功的特性。"""
+        self.converted[feature_type] += 1
+
+    def record_issue(self, feature_type: str, location: dict, detail: str) -> None:
+        """记录一处需要确认的转换问题。"""
+        self.issues.append(
+            {
+                "type": feature_type,
+                "location": {**location, "detail": detail},
+            }
+        )
+
+    def unsupported_entries(self) -> list[dict]:
+        """把逐项问题压缩为现有 ``unsupported_features`` 契约。"""
+        grouped: dict[str, list[dict]] = defaultdict(list)
+        for issue in self.issues:
+            grouped[issue["type"]].append(issue["location"])
+        return [
+            feature_entry(feature_type, len(locations), locations)
+            for feature_type, locations in sorted(grouped.items())
+        ]
+
+
+class DocxInlineContext:
+    """DOCX 主文档和脚注内联抽取所需的只读包信息。"""
+
+    def __init__(
+        self,
+        main_relationships: dict[str, dict],
+        footnote_relationships: dict[str, dict],
+        footnotes: dict[str, ET.Element],
+    ) -> None:
+        self.main_relationships = main_relationships
+        self.footnote_relationships = footnote_relationships
+        self.footnotes = footnotes
+        self.tracker = InlineFeatureTracker()
+        self.referenced_footnotes: set[str] = set()
 
 
 def import_docx_libs() -> tuple[Any, Any, Any]:
@@ -140,32 +205,419 @@ def paragraph_evidence(paragraph: Any) -> dict:
     }
 
 
-def run_payload(paragraph: Any) -> list[dict]:
-    """提取段落中非空 run 的文本和格式证据。
+def word_attribute(element: ET.Element, name: str) -> str:
+    """读取 WordprocessingML 的 ``w:*`` 属性。"""
+    return str(element.get(f"{{{WORD_NS}}}{name}", ""))
 
-    Args:
-        paragraph (Any): python-docx Paragraph 对象。
 
-    Returns:
-        list[dict]: 保留粗体、斜体、上下标和字号的 run 列表。
-    """
-    runs = []
-    for index, run in enumerate(paragraph.runs, start=1):
-        text = run.text
-        if not text:
+def run_property_enabled(properties: ET.Element | None, name: str) -> bool:
+    """读取显式 run on/off 属性，不把样式继承误报为显式格式。"""
+    if properties is None:
+        return False
+    element = properties.find(f"{{{WORD_NS}}}{name}")
+    if element is None:
+        return False
+    return word_attribute(element, "val").strip().lower() not in {"0", "false", "off", "no"}
+
+
+def run_format(element: ET.Element) -> dict:
+    """从底层 ``w:r`` 提取与现有账本兼容的格式字段。"""
+    properties = element.find(f"{{{WORD_NS}}}rPr")
+    vertical = ""
+    size = None
+    if properties is not None:
+        vertical_element = properties.find(f"{{{WORD_NS}}}vertAlign")
+        if vertical_element is not None:
+            vertical = word_attribute(vertical_element, "val")
+        size_element = properties.find(f"{{{WORD_NS}}}sz")
+        if size_element is not None:
+            try:
+                size = round(float(word_attribute(size_element, "val")) / 2, 2)
+            except ValueError:
+                size = None
+    return {
+        "bold": run_property_enabled(properties, "b"),
+        "italic": run_property_enabled(properties, "i"),
+        "superscript": vertical == "superscript",
+        "subscript": vertical == "subscript",
+        "font_size_pt": size,
+    }
+
+
+def text_item(text: str, formatting: dict) -> dict | None:
+    """构造普通文本 run；空文本不进入账本。"""
+    if not text:
+        return None
+    return {"text": text, **formatting}
+
+
+def items_complete(items: list[dict]) -> bool:
+    """判断内联条目及其嵌套内容是否都可确定性渲染。"""
+    for item in items:
+        kind = item.get("kind", "text")
+        if kind == "text":
             continue
-        runs.append(
+        if item.get("conversion_status") not in {"converted", "resolved"}:
+            return False
+        if kind == "hyperlink" and not items_complete(item.get("runs") or []):
+            return False
+        if kind == "footnote":
+            for paragraph_items in item.get("content") or []:
+                if not items_complete(paragraph_items):
+                    return False
+    return True
+
+
+def inline_plain_text(items: list[dict]) -> str:
+    """生成供语义判断和检索使用的有界可读文本。"""
+    parts = []
+    for item in items:
+        kind = item.get("kind", "text")
+        if kind in {"text", "hyperlink"}:
+            parts.append(str(item.get("text") or ""))
+        elif kind == "equation":
+            latex = item.get("latex") or item.get("candidate_latex") or "未转换公式"
+            parts.append(f"[公式: {latex}]")
+        elif kind == "footnote":
+            parts.append(f"[脚注: {item.get('text') or '未转换'}]")
+        elif kind == "endnote":
+            parts.append(f"[尾注 {item.get('note_id') or '?'}]")
+    return "".join(parts)
+
+
+def equation_item(
+    element: ET.Element,
+    *,
+    display: bool,
+    context: DocxInlineContext,
+    location: dict,
+) -> dict:
+    """转换一个 Word 原生 OMML 公式，并记录未知结构。"""
+    conversion = convert_omml(element)
+    item = {
+        "kind": "equation",
+        "display": display,
+        "source_format": "omml",
+    }
+    if conversion.complete:
+        item.update({"latex": conversion.latex, "conversion_status": "converted"})
+        context.tracker.record_converted("equations")
+    else:
+        item.update(
             {
-                "index": index,
-                "text": text,
-                "bold": bool(run.bold),
-                "italic": bool(run.italic),
-                "superscript": bool(run.font.superscript),
-                "subscript": bool(run.font.subscript),
-                "font_size_pt": (round(run.font.size.pt, 2) if run.font.size is not None else None),
+                "candidate_latex": conversion.latex,
+                "unsupported_omml_tags": list(conversion.unsupported_tags),
+                "conversion_status": "needs_confirmation",
             }
         )
-    return runs
+        detail = (
+            "OMML 转换结果为空。"
+            if not conversion.latex
+            else "OMML 含未支持节点：" + ", ".join(conversion.unsupported_tags)
+        )
+        context.tracker.record_issue("unconverted_equation", location, detail)
+    return item
+
+
+def note_content(
+    note_id: str,
+    *,
+    context: DocxInlineContext,
+    location: dict,
+) -> tuple[list[list[dict]], str, list[str]]:
+    """提取脚注中的段落级内联内容，并返回无法承接的对象类型。"""
+    footnote = context.footnotes.get(note_id)
+    if footnote is None:
+        return [], "", ["missing_footnote_body"]
+    unsupported = sorted(
+        {
+            local_name(element.tag)
+            for element in footnote.iter()
+            if local_name(element.tag)
+            in {
+                "altChunk",
+                "drawing",
+                "fldChar",
+                "fldSimple",
+                "instrText",
+                "numPr",
+                "object",
+                "oMathPara",
+                "pict",
+                "sdt",
+                "tbl",
+                "txbxContent",
+            }
+        }
+    )
+    paragraphs = []
+    for paragraph_index, paragraph in enumerate(
+        footnote.findall(f"{{{WORD_NS}}}p"),
+        start=1,
+    ):
+        paragraph_location = {
+            **location,
+            "part": "word/footnotes.xml",
+            "note_id": note_id,
+            "note_paragraph": paragraph_index,
+        }
+        paragraphs.append(
+            inline_items_from_parent(
+                paragraph,
+                context=context,
+                relationships=context.footnote_relationships,
+                location=paragraph_location,
+                allow_footnotes=False,
+            )
+        )
+    text = "\n".join(inline_plain_text(items).strip() for items in paragraphs).strip()
+    return paragraphs, text, unsupported
+
+
+def footnote_item(
+    note_id: str,
+    *,
+    context: DocxInlineContext,
+    location: dict,
+    in_table: bool,
+    allow_footnotes: bool,
+) -> dict:
+    """把脚注引用和脚注正文合并为一个可渲染内联条目。"""
+    if not allow_footnotes:
+        detail = "脚注或尾注中嵌套了脚注引用，OOXML 结构不符合可安全转换边界。"
+        context.tracker.record_issue("unconverted_footnote", location, detail)
+        return {
+            "kind": "footnote",
+            "note_id": note_id,
+            "text": "",
+            "content": [],
+            "conversion_status": "needs_confirmation",
+        }
+    context.referenced_footnotes.add(note_id)
+    content, text, unsupported = note_content(note_id, context=context, location=location)
+    problems = []
+    if not content or not text:
+        problems.append("脚注正文缺失或为空。")
+    if unsupported:
+        problems.append("脚注含暂不支持对象：" + ", ".join(unsupported))
+    if not all(items_complete(paragraph_items) for paragraph_items in content):
+        problems.append("脚注正文仍有未完成的内联转换。")
+    if in_table:
+        problems.append("脚注位于表格单元格；当前表格渲染器不能可靠放置脚注正文。")
+    status = "needs_confirmation" if problems else "converted"
+    if problems:
+        context.tracker.record_issue("unconverted_footnote", location, " ".join(problems))
+    else:
+        context.tracker.record_converted("footnotes")
+    return {
+        "kind": "footnote",
+        "note_id": note_id,
+        "text": text,
+        "content": content,
+        "conversion_status": status,
+    }
+
+
+def run_inline_items(
+    element: ET.Element,
+    *,
+    context: DocxInlineContext,
+    location: dict,
+    allow_footnotes: bool,
+    in_table: bool,
+) -> list[dict]:
+    """按 ``w:r`` 子节点顺序拆出文本、脚注和公式。"""
+    formatting = run_format(element)
+    items = []
+    buffer = []
+
+    def flush_text() -> None:
+        item = text_item("".join(buffer), formatting)
+        buffer.clear()
+        if item is not None:
+            items.append(item)
+
+    for child in element:
+        tag = local_name(child.tag)
+        if tag == "rPr":
+            continue
+        if tag in {"t", "delText"}:
+            buffer.append(child.text or "")
+        elif tag == "tab":
+            buffer.append("\t")
+        elif tag in {"br", "cr"}:
+            buffer.append("\n")
+        elif tag == "noBreakHyphen":
+            buffer.append("‑")
+        elif tag == "softHyphen":
+            buffer.append("\u00ad")
+        elif tag == "footnoteReference":
+            flush_text()
+            note_id = word_attribute(child, "id")
+            items.append(
+                footnote_item(
+                    note_id,
+                    context=context,
+                    location=location,
+                    in_table=in_table,
+                    allow_footnotes=allow_footnotes,
+                )
+            )
+        elif tag == "endnoteReference":
+            flush_text()
+            items.append(
+                {
+                    "kind": "endnote",
+                    "note_id": word_attribute(child, "id"),
+                    "conversion_status": "needs_confirmation",
+                }
+            )
+        elif tag in {"oMath", "oMathPara"}:
+            flush_text()
+            items.append(
+                equation_item(
+                    child,
+                    display=tag == "oMathPara",
+                    context=context,
+                    location=location,
+                )
+            )
+    flush_text()
+    return items
+
+
+def hyperlink_item(
+    element: ET.Element,
+    *,
+    context: DocxInlineContext,
+    relationships: dict[str, dict],
+    location: dict,
+    allow_footnotes: bool,
+    in_table: bool,
+) -> dict:
+    """抽取外部超链接目标和带格式显示文本。"""
+    nested = inline_items_from_parent(
+        element,
+        context=context,
+        relationships=relationships,
+        location=location,
+        allow_footnotes=allow_footnotes,
+        in_table=in_table,
+    )
+    relationship_id = element.get(f"{{{REL_NS}}}id", "")
+    anchor = word_attribute(element, "anchor")
+    relationship = relationships.get(relationship_id)
+    target = str(relationship.get("target") or "") if relationship else ""
+    target_mode = str(relationship.get("target_mode") or "") if relationship else ""
+    url = target
+    if url and anchor and "#" not in url:
+        url = f"{url}#{anchor}"
+    scheme = urlsplit(url).scheme.lower()
+    problems = []
+    if not nested or not inline_plain_text(nested):
+        problems.append("超链接没有可见显示文本。")
+    if not relationship_id and anchor:
+        problems.append("内部书签跳转尚未映射为 LaTeX label。")
+    elif not relationship or target_mode.lower() != "external":
+        problems.append("超链接关系目标缺失或不是外部关系。")
+    elif scheme not in SUPPORTED_HYPERLINK_SCHEMES:
+        problems.append(f"超链接协议 {scheme or 'unknown'} 不在自动转换范围。")
+    elif any(character in url for character in "{}\\\r\n"):
+        problems.append("超链接目标含不能安全写入 LaTeX 参数的控制字符。")
+    if not items_complete(nested):
+        problems.append("超链接显示内容仍有未完成的内联转换。")
+    status = "needs_confirmation" if problems else "converted"
+    if problems:
+        context.tracker.record_issue("unconverted_hyperlink", location, " ".join(problems))
+    else:
+        context.tracker.record_converted("hyperlinks")
+    return {
+        "kind": "hyperlink",
+        "text": inline_plain_text(nested),
+        "url": url or None,
+        "relationship_id": relationship_id or None,
+        "anchor": anchor or None,
+        "runs": nested,
+        "conversion_status": status,
+    }
+
+
+def inline_items_from_parent(
+    parent: ET.Element,
+    *,
+    context: DocxInlineContext,
+    relationships: dict[str, dict],
+    location: dict,
+    allow_footnotes: bool = True,
+    in_table: bool = False,
+) -> list[dict]:
+    """按 OOXML 顺序抽取段落或透明容器中的内联语义。"""
+    items = []
+    for child in parent:
+        tag = local_name(child.tag)
+        if tag == "r":
+            items.extend(
+                run_inline_items(
+                    child,
+                    context=context,
+                    location=location,
+                    allow_footnotes=allow_footnotes,
+                    in_table=in_table,
+                )
+            )
+        elif tag == "hyperlink":
+            items.append(
+                hyperlink_item(
+                    child,
+                    context=context,
+                    relationships=relationships,
+                    location=location,
+                    allow_footnotes=allow_footnotes,
+                    in_table=in_table,
+                )
+            )
+        elif tag in {"oMath", "oMathPara"}:
+            items.append(
+                equation_item(
+                    child,
+                    display=tag == "oMathPara",
+                    context=context,
+                    location=location,
+                )
+            )
+        elif tag in TRANSPARENT_INLINE_CONTAINERS or tag == "ins":
+            items.extend(
+                inline_items_from_parent(
+                    child,
+                    context=context,
+                    relationships=relationships,
+                    location=location,
+                    allow_footnotes=allow_footnotes,
+                    in_table=in_table,
+                )
+            )
+    return items
+
+
+def run_payload(
+    paragraph: Any,
+    *,
+    context: DocxInlineContext | None = None,
+    location: dict | None = None,
+    in_table: bool = False,
+) -> list[dict]:
+    """按原始顺序提取文本 run、超链接、脚注和 Word 原生公式。"""
+    active_context = context or DocxInlineContext({}, {}, {})
+    items = inline_items_from_parent(
+        paragraph._element,
+        context=active_context,
+        relationships=active_context.main_relationships,
+        location=location or {"part": "word/document.xml"},
+        in_table=in_table,
+    )
+    for index, item in enumerate(items, start=1):
+        item["index"] = index
+    return items
 
 
 def local_name(tag: str) -> str:
@@ -213,6 +665,50 @@ def xml_root(archive: zipfile.ZipFile, name: str) -> ET.Element | None:
         return ET.fromstring(archive.read(name))
     except (KeyError, ET.ParseError):
         return None
+
+
+def relationship_targets(archive: zipfile.ZipFile, part_name: str) -> dict[str, dict]:
+    """读取 OOXML 部件的关系目标。"""
+    part = PurePosixPath(part_name)
+    relationship_name = (part.parent / "_rels" / f"{part.name}.rels").as_posix()
+    root = xml_root(archive, relationship_name)
+    if root is None:
+        return {}
+    relationships = {}
+    for relationship in root.findall(f"{{{PACKAGE_REL_NS}}}Relationship"):
+        relationship_id = relationship.get("Id")
+        target = relationship.get("Target")
+        if not relationship_id or not target:
+            continue
+        relationships[relationship_id] = {
+            "target": target,
+            "target_mode": relationship.get("TargetMode", "Internal"),
+            "type": relationship.get("Type", ""),
+        }
+    return relationships
+
+
+def footnote_elements(archive: zipfile.ZipFile) -> dict[str, ET.Element]:
+    """读取非内置脚注节点，并按 Word 脚注 ID 建立索引。"""
+    root = xml_root(archive, "word/footnotes.xml")
+    if root is None:
+        return {}
+    notes = {}
+    for footnote in root.findall(f"{{{WORD_NS}}}footnote"):
+        note_id = footnote.get(f"{{{WORD_NS}}}id")
+        if note_id and note_id not in {"-1", "0"}:
+            notes[note_id] = footnote
+    return notes
+
+
+def load_inline_context(docx_path: Path) -> DocxInlineContext:
+    """加载主文档关系、脚注关系和脚注正文。"""
+    with zipfile.ZipFile(docx_path) as archive:
+        return DocxInlineContext(
+            main_relationships=relationship_targets(archive, "word/document.xml"),
+            footnote_relationships=relationship_targets(archive, "word/footnotes.xml"),
+            footnotes=footnote_elements(archive),
+        )
 
 
 def count_elements(
@@ -325,8 +821,6 @@ def detect_unsupported_features(docx_path: Path) -> list[dict]:
         ]
 
         checks = [
-            ("hyperlink", document_parts, {"hyperlink"}, None),
-            ("equation_omml", parts, {"oMath", "oMathPara"}, None),
             ("textbox", parts, {"txbxContent"}, None),
             ("tracked_changes", parts, {"ins", "del", "moveFrom", "moveTo"}, None),
             ("content_control", document_parts, {"sdt"}, None),
@@ -337,9 +831,9 @@ def detect_unsupported_features(docx_path: Path) -> list[dict]:
             ("automatic_numbering", document_parts, {"numPr"}, None),
             ("comment", [name for name in parts if name == "word/comments.xml"], {"comment"}, None),
             (
-                "footnote_or_endnote",
-                [name for name in parts if name in {"word/footnotes.xml", "word/endnotes.xml"}],
-                {"footnote", "endnote"},
+                "endnote",
+                [name for name in parts if name == "word/endnotes.xml"],
+                {"endnote"},
                 {"-1", "0"},
             ),
         ]
@@ -388,7 +882,7 @@ def iter_body_blocks(parent: Any, containers: tuple[str, ...] = ()):
     """
     for child in parent.iterchildren():
         tag = local_name(child.tag)
-        if tag in {"p", "tbl"}:
+        if tag in {"p", "tbl", "oMathPara"}:
             yield child, containers
         elif tag in TRANSPARENT_BODY_CONTAINERS:
             yield from iter_body_blocks(child, (*containers, tag))
@@ -454,7 +948,12 @@ def paragraph_image_refs(
     return refs
 
 
-def table_payload(table: Any) -> dict:
+def table_payload(
+    table: Any,
+    *,
+    context: DocxInlineContext | None = None,
+    table_id: str = "table",
+) -> dict:
     """把 python-docx 表格转换为账本表格结构。
 
     Args:
@@ -464,10 +963,35 @@ def table_payload(table: Any) -> dict:
         dict: 表格行、行数和列数。
     """
     rows = []
-    for row in table.rows:
-        rows.append([cell.text.strip() for cell in row.cells])
+    inline_rows = []
+    for row_index, row in enumerate(table.rows, start=1):
+        text_row = []
+        inline_row = []
+        for column_index, cell in enumerate(row.cells, start=1):
+            cell_paragraphs = []
+            cell_texts = []
+            for paragraph_index, paragraph in enumerate(cell.paragraphs, start=1):
+                items = run_payload(
+                    paragraph,
+                    context=context,
+                    location={
+                        "part": "word/document.xml",
+                        "table_id": table_id,
+                        "row": row_index,
+                        "column": column_index,
+                        "cell_paragraph": paragraph_index,
+                    },
+                    in_table=True,
+                )
+                cell_paragraphs.append(items)
+                cell_texts.append(inline_plain_text(items).strip())
+            text_row.append("\n".join(text for text in cell_texts if text))
+            inline_row.append(cell_paragraphs)
+        rows.append(text_row)
+        inline_rows.append(inline_row)
     return {
         "rows": rows,
+        "inline_rows": inline_rows,
         "row_count": len(rows),
         "column_count": max((len(row) for row in rows), default=0),
     }
@@ -545,6 +1069,7 @@ def extract(root: Path, docx_path: Path) -> dict:
     order = 0
     image_count = 0
     anchored_media_paths = set()
+    inline_context = load_inline_context(docx_path)
     unsupported_features = detect_unsupported_features(docx_path)
 
     for child, containers in iter_body_blocks(document.element.body):
@@ -553,7 +1078,12 @@ def extract(root: Path, docx_path: Path) -> dict:
             paragraph_count += 1
             paragraph_id = f"p{paragraph_count:04d}"
             paragraph = paragraph_class(child, document)
-            text = paragraph.text.strip()
+            runs = run_payload(
+                paragraph,
+                context=inline_context,
+                location={"part": "word/document.xml", "paragraph_id": paragraph_id},
+            )
+            text = inline_plain_text(runs).strip()
             style = getattr(paragraph.style, "name", "")
             image_refs = paragraph_image_refs(paragraph, paragraph_id, text)
             candidate_type, confidence = classify_text(text, style)
@@ -572,6 +1102,10 @@ def extract(root: Path, docx_path: Path) -> dict:
                 order += 1
                 anchor_block_order = order
                 evidence = paragraph_evidence(paragraph)
+                evidence["inline_item_count"] = len(runs)
+                evidence["inline_kinds"] = dict(
+                    sorted(Counter(item.get("kind", "text") for item in runs).items())
+                )
                 if containers:
                     evidence["container_path"] = list(containers)
                     evidence["inside_content_control"] = "sdt" in containers
@@ -582,7 +1116,7 @@ def extract(root: Path, docx_path: Path) -> dict:
                     "candidate_type": candidate_type,
                     "text": text,
                     "summary": block_summary(text),
-                    "runs": run_payload(paragraph),
+                    "runs": runs,
                     "evidence": evidence,
                     "target_slot": None,
                     "status": status,
@@ -607,12 +1141,54 @@ def extract(root: Path, docx_path: Path) -> dict:
                 markdown.append(f"## {block['id']} [image] needs_confirmation")
                 markdown.append(f"{block['summary']} (anchor: {paragraph_id})")
                 markdown.append("")
+        elif tag == "oMathPara":
+            paragraph_count += 1
+            order += 1
+            paragraph_id = f"p{paragraph_count:04d}"
+            equation = equation_item(
+                child,
+                display=True,
+                context=inline_context,
+                location={"part": "word/document.xml", "paragraph_id": paragraph_id},
+            )
+            equation["index"] = 1
+            text = inline_plain_text([equation])
+            block = {
+                "id": paragraph_id,
+                "order": order,
+                "source_type": "paragraph",
+                "candidate_type": "body",
+                "text": text,
+                "summary": block_summary(text),
+                "runs": [equation],
+                "evidence": {
+                    "style": "Office Math",
+                    "display_equation": True,
+                    **({"container_path": list(containers)} if containers else {}),
+                },
+                "target_slot": None,
+                "status": "needs_confirmation",
+                "confidence": 0.8,
+                "requires_confirmation": True,
+                "confirmation": None,
+                "discard_reason": None,
+                "render_result": None,
+            }
+            blocks.append(block)
+            non_empty_texts.append(text)
+            markdown.append(f"## {block['id']} [body] needs_confirmation")
+            markdown.append(block["summary"])
+            markdown.append("")
         elif tag == "tbl":
             table_count += 1
             order += 1
             table = table_class(child, document)
             metadata_tables.append(table)
-            payload = table_payload(table)
+            payload = table_payload(
+                table,
+                context=inline_context,
+                table_id=f"t{table_count:04d}",
+            )
             evidence = {"position": order}
             if containers:
                 evidence["container_path"] = list(containers)
@@ -639,6 +1215,16 @@ def extract(root: Path, docx_path: Path) -> dict:
             markdown.append(block["summary"])
             markdown.append("")
 
+    for orphan_note_id in sorted(
+        set(inline_context.footnotes) - inline_context.referenced_footnotes
+    ):
+        inline_context.tracker.record_issue(
+            "unconverted_footnote",
+            {"part": "word/footnotes.xml", "note_id": orphan_note_id},
+            "脚注正文没有在主文档中找到对应引用。",
+        )
+    unsupported_features.extend(inline_context.tracker.unsupported_entries())
+
     unanchored_images = [
         entry for entry in media_entries(docx_path) if entry not in anchored_media_paths
     ]
@@ -664,6 +1250,10 @@ def extract(root: Path, docx_path: Path) -> dict:
             "source_blocks_by_type": {
                 source_type: sum(1 for block in blocks if block.get("source_type") == source_type)
                 for source_type in ("paragraph", "table", "image")
+            },
+            "converted_inline_features": {
+                feature_type: inline_context.tracker.converted.get(feature_type, 0)
+                for feature_type in ("equations", "footnotes", "hyperlinks")
             },
             "unsupported_features": sum(feature["count"] for feature in unsupported_features),
         },

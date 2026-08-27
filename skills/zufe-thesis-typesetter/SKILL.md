@@ -17,7 +17,7 @@ description: 当用户需要使用 ZUFE-Thesis 模板处理 Word 论文或报告
 
 ## 核心契约
 
-必须从 ZUFE-Thesis 模板根目录运行。修改任何文件前，先确认模板签名完整。
+必须从 ZUFE-Thesis 模板根目录运行。修改任何文件前，先确认模板签名、身份版本和渲染器依赖接口满足兼容性门禁。
 
 如果用户尚未准备模板项目，先说明本 Skill 依赖原始 ZUFE-Thesis LaTeX 模板，并按下面顺序处理：
 
@@ -70,15 +70,15 @@ workspace/output/qa_report.md
 
 所有可执行脚本接受 `--root`，并输出 JSON 或写入 JSON 报告。先以当前已加载的 `SKILL.md` 所在目录作为 Skill 根目录，从该目录解析 `scripts/`，再把完整的 ZUFE-Thesis 模板根目录传给 `--root`；不要假定 Skill 文件夹位于模板工作区内。高数据量命令的 stdout 只给有界摘要和完整报告路径；Agent 先读摘要，只在需要具体证据时分页查询或读取报告。正常执行优先使用已文档化的 CLI，只有调试或维护脚本时才读取源码。
 
-- `scripts/check_template.py`：检查 ZUFE-Thesis 模板签名。
+- `scripts/check_template.py`：检查 ZUFE-Thesis 模板文件、身份版本和渲染器依赖接口；只有用户明确确认后，才可用 `--confirm-compatible-template` 接受接口完整但未列入验证范围的版本。
 - `scripts/prepare_workspace.py`：创建 `workspace/`，把 DOCX 放到标准路径，并可在用户批准后归档旧输出。
 - `scripts/check_env.py`：按 `--stage` 检查 Python、`python-docx`、`xelatex`、`biber`、模板关键 TeX 包和 QA 工具；它不替代模板签名或 DOCX 可读性检查。
 - `scripts/prescan_docx.py`：流程 A 的 DOCX 轻量预扫描和 metadata 候选提取。不得生成正式 `thesis.json`。
-- `scripts/import_docx.py`：流程 B 正式抽取，生成 `thesis.json` 和 `extracted.md`。
+- `scripts/import_docx.py`：流程 B 正式抽取，按原文顺序记录普通 run、可转换的超链接、脚注和原生 OMML 公式，并生成 `thesis.json` 和 `extracted.md`。
 - `scripts/ledger.py`：只读汇总、分页查询源块并生成带前后文的标题候选大纲；不得用它绕过 Agent 的语义判断。
 - `scripts/export_assets.py`：核对源 DOCX 指纹后，抽取媒体到 `Images/word_media/` 并记录证据。
 - `scripts/render_basicinfo.py`：把 metadata、摘要和关键词写入 `chapters/basicinfo.tex`。
-- `scripts/render_chapters.py`：在拒绝重复章节目标和无效图片资源后，把已确认章节映射写入 `chapters/*.tex` 和 `chapters/mainbody.tex`。
+- `scripts/render_chapters.py`：在拒绝重复章节目标、无效图片资源和未决内联语义后，把已确认章节映射写入 `chapters/*.tex` 和 `chapters/mainbody.tex`。
 - `scripts/render_bib.py`：只有所有参考文献项均已确认时才原子写入 `Reference.bib`，不得编造或部分覆盖参考文献。
 - `scripts/check_flow_b_gate.py`：若仍有未处理、未确认或未渲染源块，则阻止流程 B 完成。
 - `scripts/build.py`：强制重跑流程 B 门禁，通过后才归档旧 `main.pdf`、清理临时文件并运行固定编译链。
@@ -96,9 +96,10 @@ Agent 负责语义判断，脚本不得替代：
 - 不从文件名猜测学院、专业、日期、导师或报告类型；metadata 只能来自 Word 证据或用户确认。
 - 不把 run 级样式问题当成普通文本问题忽略；上标、下标、表格字号异常都必须在流程 B/C 暴露。
 - 流程 C 不修正文档语义；内容归属错误必须退回流程 B。
-- 处理标题前，先通读全文并根据内容关系重建完整大纲；不能仅凭段落样式、编号外观或局部上下文逐段猜测标题及其层级。
+- 排版默认采用 preserve-first：先以原文样式、顺序和上下级关系表达的结构意图为基线，再通读全文形成完整候选大纲；不能仅凭段落样式、编号外观或局部上下文逐段猜测标题及其层级。
+- 若要把正文升格为标题、把标题降格为正文、改变标题层级所表达的章节从属，或将内容移入不同章节，必须在 `confirmation.note` 记录原始证据、调整理由和用户确认；没有充分证据时保留原结构并说明歧义。
 - 对每个标题判断它是否属于真正的文章结构，并检查上下级关系、同级并列关系和出现顺序是否连贯；脚本候选、Word 样式和原文编号只能提供线索，不能替代语义判断。
-- 区分标题正文与原文手写编号。确认 `第一章`、`1.1`、`一、` 等内容只是人工编号后，从最终标题文字中去除，只保留标题正文，再由 LaTeX 按已经确认的层级自动编号；不得让原文编号与 LaTeX 编号同时出现。
+- 区分标题正文与原文手写编号。确认 `第一章`、`1.1`、`一、` 等内容只是人工编号后，从最终标题文字中去除，只保留标题正文，再由 LaTeX 按已经确认的层级自动编号；不得让原文编号与 LaTeX 编号同时出现。去除已确认的手写编号属于排版规范化，不等同于擅自改写文章结构；编号性质仍有歧义时必须确认。
 
 ## 转换质量硬约束
 
@@ -111,7 +112,8 @@ Agent 负责语义判断，脚本不得替代：
 - 映射到 `chapters/basicinfo.tex` 的源块必须声明 `metadata_fields`，且脚本必须核对整个源块都有去向；不能被宏承接的文字须改映射，或用 `metadata_excluded_text` 和 `metadata_exclusion_reason` 显式记录。
 - 表格默认使用模板风格字号 `\zihao{5}`。不得无条件使用 `\resizebox{\textwidth}{!}{...}`，因为它会把较窄表格放大并破坏字号。
 - 只有表格自然宽度确实超过版心且没有更稳妥的列宽方案时，才允许缩小表格；禁止为了“填满版心”放大表格。
-- 脚注、尾注、公式、超链接、批注、修订痕迹、文本框、内容控件、外部导入内容、链接图片、Word 域/自动编号、图表/SmartArt、OLE 对象和页眉页脚等暂不自动转换内容必须进入 `unsupported_features`，不得静默忽略。
+- Word 中目标明确的 `http`/`https`/`mailto` 外部超链接、仅含可承接内联内容的普通脚注，以及公式编辑器生成且当前转换器能够完整识别的原生 OMML 公式，必须按原文顺序保留并渲染；不能完整转换时必须进入 `unsupported_features`，不得只保留可见文本或静默忽略。
+- 尾注、内部书签跳转、表格单元格脚注、未知 OMML 结构、图片/墨迹公式、MathType/OLE 对象，以及批注、修订痕迹、文本框、内容控件、外部导入内容、链接图片、Word 域/自动编号、图表/SmartArt 和页眉页脚等仍属于显式边界。Agent 必须核对公式语义和最终 PDF，自动转换成功不等于已经证明复杂公式与源 Word 视觉一致。
 
 ## 踩坑清单
 

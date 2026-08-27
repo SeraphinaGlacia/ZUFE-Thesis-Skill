@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint, type check, and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.21"
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Install development dependencies
+        run: uv sync --locked --no-default-groups --group lint --group test
+
+      - name: Check formatting
+        run: uv run ruff format --check skills/zufe-thesis-typesetter/scripts tests
+
+      - name: Lint
+        run: uv run ruff check skills/zufe-thesis-typesetter/scripts tests
+
+      - name: Type check
+        run: uv run ty check
+
+      - name: Test
+        run: uv run pytest

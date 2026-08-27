@@ -4,7 +4,7 @@
 
 ## 顺序
 
-1. 检查模板签名。
+1. 检查模板签名和兼容性契约。
 2. 创建或确认 `workspace/`，把 Word 文件放到 `workspace/input/thesis.docx`。
 3. 按 `environment-sop.md` 运行 `check_env.py --stage minimal`，检查最小 Python DOCX 抽取环境。
 4. 轻量预扫描 Word。
@@ -16,7 +16,7 @@
 
 `prescan_docx.py` 默认把完整结果写入 `workspace/intermediate/prescan.json`，stdout 只返回 metadata 候选、计数、少量结构示例和报告路径。需要更多预扫描证据时读取该报告，不要要求命令把全部段落重复输出到对话。
 
-## 模板签名
+## 模板兼容性契约
 
 模板根目录必须包含：
 
@@ -36,7 +36,14 @@
 
 不要把 `main.pdf`、`README.md`、`docs/`、`paperCode/`、样例章节或样例图片作为门禁。第一版不把 `InitFile/anonyLogo.png` 作为硬门禁。
 
-如果模板签名不完整，先说明本 Skill 依赖原始模板仓库，并在用户确认后协助获取：
+文件存在只是第一层检查。`check_template.py` 还必须核对 `zufe.cls` 声明的模板身份和版本，以及 `main.tex`、封面、摘要、参考文献和模板包中被当前渲染器实际调用的关键接口。
+
+- 模板身份明确不是 `ZUFE-Thesis`，或缺少渲染器所需接口时，状态为 `blocked`，不能用确认参数绕过。
+- 模板版本为已验证版本且接口完整时，状态为 `passed`。
+- 老模板没有身份/版本标识，或版本尚未列入验证范围但接口完整时，状态为 `needs_confirmation`。Agent 必须说明来源和兼容性风险；只有用户明确同意后，才可用 `--confirm-compatible-template` 重跑并继续。
+- 不使用整文件 hash 作为唯一兼容条件，避免注释或无关排版调整导致误判；实际接口发生变化仍必须阻塞。
+
+如果模板文件或兼容接口不完整，先说明本 Skill 依赖原始模板仓库，并在用户确认后协助获取：
 
 ```text
 https://github.com/sqsssq/ZUFE-Thesis

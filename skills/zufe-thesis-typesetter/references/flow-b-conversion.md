@@ -83,11 +83,20 @@ python "<skill-root>/scripts/ledger.py" --root . outline --offset 0 --limit 20
 
 `<skill-root>` 表示当前已加载的 `SKILL.md` 所在目录，不要求 Skill 安装在模板工作区中。`summary` 用于总体状态，`pending` 用于分页处理，`get` 只展开一个源块，`outline` 把标题候选、Word 证据和相邻源块放在一起。只有这些有界结果不足以完成跨块判断时，才读取完整账本。
 
+## preserve-first 结构原则
+
+流程 B 仍须对全文做语义理解，但默认目标是忠实排版，不是主动重写文章结构。Agent 先把 Word 样式、标题文字、源顺序和上下级关系视为原作者结构意图的证据，再检查它们是否存在明显矛盾。
+
+- 去除已经确认的标题手写编号、把 Word 标题样式映射为对应 LaTeX 层级，属于格式规范化。
+- 把普通正文升格为标题、把标题降格为正文、改变标题层级所表达的章节从属，或把内容移入不同章节，属于实质结构调整。
+- 实质结构调整必须有全文语义证据，并把原始判断、最终判断、调整理由和用户确认写入该源块的 `confirmation.note`；确认完成前保持 `requires_confirmation=true` 和 `status=needs_confirmation`。
+- 如果原文样式、编号和语义互相冲突且无法形成高置信度结论，保留原始结构意图并向用户说明候选方案，不以“结构更合理”为由静默改写。
+
 ## 标题的混合语义识别
 
 标题层级和编号含义属于语义判断，不能由脚本根据文本外观单独决定。脚本负责保留原文、Word 样式、字号和相邻位置等证据；Agent 必须结合全文结构判断标题是否成立、它是章、节还是小节，以及原文开头是否需要从渲染标题中去除。
 
-- 先用 `ledger.py pending` 分页处理全部源块并完成初步语义判断，再运行 `outline` 汇总脚本候选和 Agent 已标记标题，按源顺序结合前后文统一定级；不要只查看脚本候选，也不要逐个孤立定级。
+- 先用 `ledger.py pending` 分页处理全部源块并完成初步语义判断，再运行 `outline` 汇总脚本候选和 Agent 已标记标题，按源顺序结合前后文统一定级；不要只查看脚本候选，也不要逐个孤立定级。统一定级仍以 preserve-first 为边界，不把“通读全文”理解成可以任意重组文章。
 - 已确认标题写入 `semantic_role=heading`、`level=1/2/3` 和非空 `render_title`；若脚本候选实际是正文或列表，也要写入真实 `semantic_role` 明确否决候选。任一标题语义字段未完成时不得渲染。
 - `第一章 绪论`、`1.1 研究背景`、`一、研究设计` 等原文开头可能是人工编号，也可能属于标题内容。Agent 必须结合上下标题和正文逻辑决定 `render_title`，不得机械迎合编号外观。
 - 如果一个候选块只有 `第一章`、`1.1` 等编号而没有标题正文，必须结合相邻块确认是否属于被 Word 拆开的同一标题；不得生成空标题，也不得自行补写标题。
@@ -96,7 +105,9 @@ python "<skill-root>/scripts/ledger.py" --root . outline --offset 0 --limit 20
 
 ## 暂不支持特性报告
 
-`import_docx.py` 必须检测脚注、尾注、OMML 公式、超链接、批注、修订痕迹、文本框、内容控件、`altChunk` 外部导入内容、链接图片、Word 域、自动编号、图表/SmartArt、OLE 对象、页眉和页脚等暂不自动转换内容，并写入 `thesis.json.unsupported_features`。
+`import_docx.py` 会按原文内联顺序抽取并转换三类可确定承接的内容：目标明确的 `http`/`https`/`mailto` 外部超链接、仅含可承接内联内容的普通脚注，以及公式编辑器生成且当前转换器能够完整识别的原生 OMML 公式。成功项写入源块 `runs` 或表格 `inline_rows`，并计入 `counts.converted_inline_features`。
+
+转换失败或超出安全边界的脚注、公式和超链接必须分别写入 `unconverted_footnote`、`unconverted_equation` 或 `unconverted_hyperlink`。此外，脚本仍须检测尾注、批注、修订痕迹、文本框、内容控件、`altChunk` 外部导入内容、链接图片、Word 域、自动编号、图表/SmartArt、OLE 对象、页眉和页脚等暂不自动转换内容，并统一写入 `thesis.json.unsupported_features`。
 
 - 报告只记录类型、数量、位置和短摘要，不保存 XML、base64 或大段原文。
 - 默认状态为 `needs_confirmation`；用户或 Agent 明确处理后，可改为 `accepted_with_warning`、`confirmed` 或 `resolved`。
@@ -104,7 +115,7 @@ python "<skill-root>/scripts/ledger.py" --root . outline --offset 0 --limit 20
 
 ## 自动转换边界
 
-脚本可以稳定清点普通段落、段落 run 格式、顶层表格、内嵌媒体文件和可见正文顺序。对于顶层内容控件，脚本会展开其中可见段落和表格，但仍保留风险项。
+脚本可以稳定清点普通段落、段落 run 格式、顶层表格、内嵌媒体文件和可见正文顺序，并可按顺序渲染已完成转换的外部超链接、普通脚注和原生 OMML 公式。对于顶层内容控件，脚本会展开其中可见段落和表格，但仍保留风险项。
 
 下列内容不能仅凭当前脚本证明已完整转换：
 
@@ -112,7 +123,8 @@ python "<skill-root>/scripts/ledger.py" --root . outline --offset 0 --limit 20
 - 图片裁剪、旋转、尺寸、浮动环绕、链接图片和精确版面位置。
 - Word 域、自动编号、交叉引用、图表对象、SmartArt、OLE 对象和宏。
 - 内容控件中的条件、隐藏、重复内容，以及 `altChunk` 外部导入正文。
-- 公式、脚注、尾注、批注、修订、文本框和页眉页脚的自动语义转换。
+- 尾注、表格单元格脚注、内部书签跳转、批注、修订、文本框和页眉页脚的自动语义转换。
+- 未知 OMML 节点、图片或墨迹公式、MathType/OLE 公式，以及复杂公式的视觉等价性证明。
 
 `unsupported_features` 是已知高风险特性的尽力检测，不是“列表为空就证明 Word 没有复杂内容”。遇到版面复杂、对象较多或抽取数量异常的 Word，Agent 必须向用户说明边界并人工核对源文档。
 

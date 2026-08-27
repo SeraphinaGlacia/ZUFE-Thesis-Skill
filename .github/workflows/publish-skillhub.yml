@@ -91,10 +91,10 @@ jobs:
         run: |
           set -euo pipefail
           uv sync --locked
-          uv run ruff check zufe-thesis-typesetter
+          uv run ruff check skills/zufe-thesis-typesetter tests
           uv run ty check
           uv run pytest
-          find zufe-thesis-typesetter -type d -name __pycache__ -prune -exec rm -rf {} +
+          find skills/zufe-thesis-typesetter tests -type d -name __pycache__ -prune -exec rm -rf {} +
 
       - name: Download published ZIP
         env:
@@ -136,7 +136,7 @@ jobs:
         run: |
           set -euo pipefail
           diff --brief --recursive \
-            source/zufe-thesis-typesetter \
+            source/skills/zufe-thesis-typesetter \
             release-unpacked/zufe-thesis-typesetter
 
       - name: Prepare SkillHub package
