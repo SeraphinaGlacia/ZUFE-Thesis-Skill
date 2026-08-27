@@ -118,6 +118,8 @@
 
 `level` 只允许 `1`、`2`、`3`，分别对应 `\chapter`、`\section`、`\subsection`。若 `candidate_type=heading` 实际是正文、列表或其他内容，Agent 应写入真实 `semantic_role` 明确否决候选，而不是给它强行分配标题层级。原文完整保留在 `text` 作为审计证据；Agent 结合全文语义决定最终标题并写入非空 `render_title`，`render_chapters.py` 只负责原样转义和渲染。标题候选缺少语义结论，或已确认标题缺少 `level`、`render_title` 时，流程 B 必须阻塞。
 
+结构判断采用 preserve-first。若最终判断涉及正文与标题互转、改变标题层级所表达的章节从属，或把内容移入不同章节，必须保持 `requires_confirmation=true`，并在用户确认后通过 `confirmation.note` 记录原始判断、最终判断、全文证据和调整理由。仅去除已经确认的手写标题编号属于格式规范化；编号是否属于标题正文仍有歧义时同样需要确认。
+
 使用 `scripts/ledger.py outline` 分页查看标题候选、Word 证据和相邻源块；使用 `get <block_id>` 时才展开单个完整源块。
 
 ## 源 DOCX 完整性
