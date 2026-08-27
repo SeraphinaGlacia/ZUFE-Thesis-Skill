@@ -74,11 +74,11 @@ workspace/output/qa_report.md
 - `scripts/prepare_workspace.py`：创建 `workspace/`，把 DOCX 放到标准路径，并可在用户批准后归档旧输出。
 - `scripts/check_env.py`：按 `--stage` 检查 Python、`python-docx`、`xelatex`、`biber`、模板关键 TeX 包和 QA 工具；它不替代模板签名或 DOCX 可读性检查。
 - `scripts/prescan_docx.py`：流程 A 的 DOCX 轻量预扫描和 metadata 候选提取。不得生成正式 `thesis.json`。
-- `scripts/import_docx.py`：流程 B 正式抽取，生成 `thesis.json` 和 `extracted.md`。
+- `scripts/import_docx.py`：流程 B 正式抽取，按原文顺序记录普通 run、可转换的超链接、脚注和原生 OMML 公式，并生成 `thesis.json` 和 `extracted.md`。
 - `scripts/ledger.py`：只读汇总、分页查询源块并生成带前后文的标题候选大纲；不得用它绕过 Agent 的语义判断。
 - `scripts/export_assets.py`：核对源 DOCX 指纹后，抽取媒体到 `Images/word_media/` 并记录证据。
 - `scripts/render_basicinfo.py`：把 metadata、摘要和关键词写入 `chapters/basicinfo.tex`。
-- `scripts/render_chapters.py`：在拒绝重复章节目标和无效图片资源后，把已确认章节映射写入 `chapters/*.tex` 和 `chapters/mainbody.tex`。
+- `scripts/render_chapters.py`：在拒绝重复章节目标、无效图片资源和未决内联语义后，把已确认章节映射写入 `chapters/*.tex` 和 `chapters/mainbody.tex`。
 - `scripts/render_bib.py`：只有所有参考文献项均已确认时才原子写入 `Reference.bib`，不得编造或部分覆盖参考文献。
 - `scripts/check_flow_b_gate.py`：若仍有未处理、未确认或未渲染源块，则阻止流程 B 完成。
 - `scripts/build.py`：强制重跑流程 B 门禁，通过后才归档旧 `main.pdf`、清理临时文件并运行固定编译链。
@@ -112,7 +112,8 @@ Agent 负责语义判断，脚本不得替代：
 - 映射到 `chapters/basicinfo.tex` 的源块必须声明 `metadata_fields`，且脚本必须核对整个源块都有去向；不能被宏承接的文字须改映射，或用 `metadata_excluded_text` 和 `metadata_exclusion_reason` 显式记录。
 - 表格默认使用模板风格字号 `\zihao{5}`。不得无条件使用 `\resizebox{\textwidth}{!}{...}`，因为它会把较窄表格放大并破坏字号。
 - 只有表格自然宽度确实超过版心且没有更稳妥的列宽方案时，才允许缩小表格；禁止为了“填满版心”放大表格。
-- 脚注、尾注、公式、超链接、批注、修订痕迹、文本框、内容控件、外部导入内容、链接图片、Word 域/自动编号、图表/SmartArt、OLE 对象和页眉页脚等暂不自动转换内容必须进入 `unsupported_features`，不得静默忽略。
+- Word 中目标明确的 `http`/`https`/`mailto` 外部超链接、仅含可承接内联内容的普通脚注，以及公式编辑器生成且当前转换器能够完整识别的原生 OMML 公式，必须按原文顺序保留并渲染；不能完整转换时必须进入 `unsupported_features`，不得只保留可见文本或静默忽略。
+- 尾注、内部书签跳转、表格单元格脚注、未知 OMML 结构、图片/墨迹公式、MathType/OLE 对象，以及批注、修订痕迹、文本框、内容控件、外部导入内容、链接图片、Word 域/自动编号、图表/SmartArt 和页眉页脚等仍属于显式边界。Agent 必须核对公式语义和最终 PDF，自动转换成功不等于已经证明复杂公式与源 Word 视觉一致。
 
 ## 踩坑清单
 

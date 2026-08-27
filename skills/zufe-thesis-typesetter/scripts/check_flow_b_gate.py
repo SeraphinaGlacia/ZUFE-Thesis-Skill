@@ -27,6 +27,7 @@ from common import (
 ACCEPTED_UNSUPPORTED_FEATURE_STATUSES = {"accepted_with_warning", "confirmed", "resolved"}
 ALLOWED_BLOCK_STATES = FINAL_BLOCK_STATES | {"blocked", "mapped", "needs_confirmation"}
 RESERVED_CHAPTER_FILES = {"chapters/basicinfo.tex", "chapters/mainbody.tex"}
+INLINE_ITEM_KINDS = {"text", "hyperlink", "footnote", "equation", "endnote"}
 
 
 def valid_chapter_file(value: str) -> bool:
@@ -49,6 +50,156 @@ def valid_chapter_file(value: str) -> bool:
         and path.suffix == ".tex"
         and value not in RESERVED_CHAPTER_FILES
     )
+
+
+def inline_item_issues(items: object, block_id: object, path: str) -> list[dict]:
+    """校验内联语义必须完整转换或带人工 LaTeX 补救。"""
+    if not isinstance(items, list):
+        return [
+            {
+                "check": "inline_items_type",
+                "block_id": block_id,
+                "detail": f"{path} 必须是列表。",
+            }
+        ]
+    issues = []
+    for index, inline_item in enumerate(items):
+        item_path = f"{path}[{index}]"
+        if not isinstance(inline_item, dict):
+            issues.append(
+                {
+                    "check": "inline_item_type",
+                    "block_id": block_id,
+                    "detail": f"{item_path} 必须是对象。",
+                }
+            )
+            continue
+        kind = str(inline_item.get("kind") or "text")
+        if kind not in INLINE_ITEM_KINDS:
+            issues.append(
+                {
+                    "check": "inline_item_kind",
+                    "block_id": block_id,
+                    "detail": f"{item_path} 含未知内联类型：{kind}。",
+                }
+            )
+            continue
+        if kind == "text":
+            continue
+        status = inline_item.get("conversion_status")
+        if status == "resolved":
+            if not isinstance(inline_item.get("latex"), str) or not inline_item["latex"].strip():
+                issues.append(
+                    {
+                        "check": "inline_resolution_latex",
+                        "block_id": block_id,
+                        "detail": f"{item_path} 标记为 resolved，但没有人工确认的 LaTeX。",
+                    }
+                )
+            continue
+        if status != "converted":
+            issues.append(
+                {
+                    "check": "inline_conversion_status",
+                    "block_id": block_id,
+                    "detail": f"{item_path} 的 {kind} 仍是 {status}。",
+                }
+            )
+            continue
+        if kind == "equation":
+            if not isinstance(inline_item.get("latex"), str) or not inline_item["latex"].strip():
+                issues.append(
+                    {
+                        "check": "equation_latex",
+                        "block_id": block_id,
+                        "detail": f"{item_path} 缺少非空 LaTeX 公式。",
+                    }
+                )
+        elif kind == "hyperlink":
+            url = inline_item.get("url")
+            if not isinstance(url, str) or not url or any(char in url for char in "{}\\\r\n"):
+                issues.append(
+                    {
+                        "check": "hyperlink_target",
+                        "block_id": block_id,
+                        "detail": f"{item_path} 缺少可安全写入 LaTeX 的链接目标。",
+                    }
+                )
+            issues.extend(
+                inline_item_issues(inline_item.get("runs"), block_id, f"{item_path}.runs")
+            )
+        elif kind == "footnote":
+            content = inline_item.get("content")
+            if not isinstance(content, list) or not content:
+                issues.append(
+                    {
+                        "check": "footnote_content",
+                        "block_id": block_id,
+                        "detail": f"{item_path} 缺少脚注正文段落。",
+                    }
+                )
+            else:
+                for paragraph_index, paragraph_items in enumerate(content):
+                    issues.extend(
+                        inline_item_issues(
+                            paragraph_items,
+                            block_id,
+                            f"{item_path}.content[{paragraph_index}]",
+                        )
+                    )
+    return issues
+
+
+def block_inline_issues(block: dict) -> list[dict]:
+    """校验正文段落和表格单元格中的全部内联条目。"""
+    block_id = block.get("id")
+    issues = []
+    if "runs" in block:
+        issues.extend(inline_item_issues(block.get("runs"), block_id, "runs"))
+    table = block.get("table")
+    if not isinstance(table, dict) or "inline_rows" not in table:
+        return issues
+    inline_rows = table.get("inline_rows")
+    if not isinstance(inline_rows, list):
+        issues.append(
+            {
+                "check": "table_inline_rows_type",
+                "block_id": block_id,
+                "detail": "table.inline_rows 必须是列表。",
+            }
+        )
+        return issues
+    for row_index, row in enumerate(inline_rows):
+        if not isinstance(row, list):
+            issues.append(
+                {
+                    "check": "table_inline_row_type",
+                    "block_id": block_id,
+                    "detail": f"table.inline_rows[{row_index}] 必须是列表。",
+                }
+            )
+            continue
+        for column_index, paragraphs in enumerate(row):
+            if not isinstance(paragraphs, list):
+                issues.append(
+                    {
+                        "check": "table_inline_cell_type",
+                        "block_id": block_id,
+                        "detail": (
+                            f"table.inline_rows[{row_index}][{column_index}] 必须是段落列表。"
+                        ),
+                    }
+                )
+                continue
+            for paragraph_index, paragraph_items in enumerate(paragraphs):
+                issues.extend(
+                    inline_item_issues(
+                        paragraph_items,
+                        block_id,
+                        (f"table.inline_rows[{row_index}][{column_index}][{paragraph_index}]"),
+                    )
+                )
+    return issues
 
 
 def ledger_schema_issues(thesis: dict) -> list[dict]:
@@ -109,6 +260,8 @@ def ledger_schema_issues(thesis: dict) -> list[dict]:
         source_type = block.get("source_type")
         if isinstance(source_type, str) and source_type in source_type_counts:
             source_type_counts[source_type] += 1
+
+        issues.extend(block_inline_issues(block))
 
         label = str(block.get("label") or block.get("latex_label") or "").strip()
         caption = str(block.get("caption") or "").strip()

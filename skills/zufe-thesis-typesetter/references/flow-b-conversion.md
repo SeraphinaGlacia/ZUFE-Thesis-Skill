@@ -105,7 +105,9 @@ python "<skill-root>/scripts/ledger.py" --root . outline --offset 0 --limit 20
 
 ## 暂不支持特性报告
 
-`import_docx.py` 必须检测脚注、尾注、OMML 公式、超链接、批注、修订痕迹、文本框、内容控件、`altChunk` 外部导入内容、链接图片、Word 域、自动编号、图表/SmartArt、OLE 对象、页眉和页脚等暂不自动转换内容，并写入 `thesis.json.unsupported_features`。
+`import_docx.py` 会按原文内联顺序抽取并转换三类可确定承接的内容：目标明确的 `http`/`https`/`mailto` 外部超链接、仅含可承接内联内容的普通脚注，以及公式编辑器生成且当前转换器能够完整识别的原生 OMML 公式。成功项写入源块 `runs` 或表格 `inline_rows`，并计入 `counts.converted_inline_features`。
+
+转换失败或超出安全边界的脚注、公式和超链接必须分别写入 `unconverted_footnote`、`unconverted_equation` 或 `unconverted_hyperlink`。此外，脚本仍须检测尾注、批注、修订痕迹、文本框、内容控件、`altChunk` 外部导入内容、链接图片、Word 域、自动编号、图表/SmartArt、OLE 对象、页眉和页脚等暂不自动转换内容，并统一写入 `thesis.json.unsupported_features`。
 
 - 报告只记录类型、数量、位置和短摘要，不保存 XML、base64 或大段原文。
 - 默认状态为 `needs_confirmation`；用户或 Agent 明确处理后，可改为 `accepted_with_warning`、`confirmed` 或 `resolved`。
@@ -113,7 +115,7 @@ python "<skill-root>/scripts/ledger.py" --root . outline --offset 0 --limit 20
 
 ## 自动转换边界
 
-脚本可以稳定清点普通段落、段落 run 格式、顶层表格、内嵌媒体文件和可见正文顺序。对于顶层内容控件，脚本会展开其中可见段落和表格，但仍保留风险项。
+脚本可以稳定清点普通段落、段落 run 格式、顶层表格、内嵌媒体文件和可见正文顺序，并可按顺序渲染已完成转换的外部超链接、普通脚注和原生 OMML 公式。对于顶层内容控件，脚本会展开其中可见段落和表格，但仍保留风险项。
 
 下列内容不能仅凭当前脚本证明已完整转换：
 
@@ -121,7 +123,8 @@ python "<skill-root>/scripts/ledger.py" --root . outline --offset 0 --limit 20
 - 图片裁剪、旋转、尺寸、浮动环绕、链接图片和精确版面位置。
 - Word 域、自动编号、交叉引用、图表对象、SmartArt、OLE 对象和宏。
 - 内容控件中的条件、隐藏、重复内容，以及 `altChunk` 外部导入正文。
-- 公式、脚注、尾注、批注、修订、文本框和页眉页脚的自动语义转换。
+- 尾注、表格单元格脚注、内部书签跳转、批注、修订、文本框和页眉页脚的自动语义转换。
+- 未知 OMML 节点、图片或墨迹公式、MathType/OLE 公式，以及复杂公式的视觉等价性证明。
 
 `unsupported_features` 是已知高风险特性的尽力检测，不是“列表为空就证明 Word 没有复杂内容”。遇到版面复杂、对象较多或抽取数量异常的 Word，Agent 必须向用户说明边界并人工核对源文档。
 

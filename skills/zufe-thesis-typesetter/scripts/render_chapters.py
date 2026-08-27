@@ -147,6 +147,57 @@ def formatted_run_to_latex(run: dict, quote_state: dict[str, bool] | None = None
     return text
 
 
+def inline_item_to_latex(item: dict, quote_state: dict[str, bool]) -> str:
+    """渲染普通 run 或已完成转换的 DOCX 内联语义。"""
+    kind = item.get("kind", "text")
+    if kind == "text":
+        return formatted_run_to_latex(item, quote_state)
+
+    status = item.get("conversion_status")
+    if status == "resolved" and item.get("latex"):
+        return str(item["latex"])
+    if status != "converted":
+        raise ValueError(f"inline {kind} requires confirmation or a resolved latex override")
+
+    if kind == "hyperlink":
+        url = str(item.get("url") or "")
+        if not url or any(character in url for character in "{}\\\r\n"):
+            raise ValueError("converted hyperlink requires a safe non-empty URL")
+        nested = item.get("runs") or []
+        display_text = "".join(inline_item_to_latex(run, quote_state) for run in nested)
+        if not display_text:
+            display_text = latex_escape(str(item.get("text") or ""), quote_state=quote_state)
+        return rf"\href{{\detokenize{{{url}}}}}{{{display_text}}}"
+
+    if kind == "footnote":
+        paragraphs = []
+        for paragraph_items in item.get("content") or []:
+            note_quote_state = {"next_quote_is_opening": True}
+            paragraphs.append(
+                "".join(inline_item_to_latex(run, note_quote_state) for run in paragraph_items)
+            )
+        content = r"\par ".join(paragraph for paragraph in paragraphs if paragraph)
+        if not content:
+            raise ValueError("converted footnote requires non-empty content")
+        return rf"\footnote{{{content}}}"
+
+    if kind == "equation":
+        latex = str(item.get("latex") or "").strip()
+        if not latex:
+            raise ValueError("converted equation requires non-empty latex")
+        if item.get("display"):
+            return f"\\[\n{latex}\n\\]"
+        return rf"\({latex}\)"
+
+    raise ValueError(f"unknown inline item kind: {kind}")
+
+
+def inline_items_to_latex(items: list[dict]) -> str:
+    """按原始顺序渲染一组内联条目。"""
+    quote_state = {"next_quote_is_opening": True}
+    return "".join(inline_item_to_latex(item, quote_state) for item in items)
+
+
 def runs_to_latex(block: dict) -> str | None:
     """把源块中的 runs 合并渲染为 LaTeX。
 
@@ -159,8 +210,7 @@ def runs_to_latex(block: dict) -> str | None:
     runs = block.get("runs") or []
     if not runs:
         return None
-    quote_state = {"next_quote_is_opening": True}
-    rendered = "".join(formatted_run_to_latex(run, quote_state) for run in runs)
+    rendered = inline_items_to_latex(runs)
     return rendered if rendered else None
 
 
@@ -184,15 +234,19 @@ def table_needs_wrapping(rows: list[list[str]], col_count: int) -> bool:
     return False
 
 
-def table_cell_to_latex(cell: str) -> str:
+def table_cell_to_latex(cell: str, inline_paragraphs: list[list[dict]] | None = None) -> str:
     """渲染单个表格单元格文本。
 
     Args:
         cell (str): 单元格原始文本。
+        inline_paragraphs (list[list[dict]] | None): 单元格内按段落保存的内联语义。
 
     Returns:
         str: 已转义并保留换行语义的 LaTeX 单元格文本。
     """
+    if inline_paragraphs is not None:
+        rendered_paragraphs = [inline_items_to_latex(items).strip() for items in inline_paragraphs]
+        return r"\newline ".join(text for text in rendered_paragraphs if text)
     lines = [latex_escape(line.strip()) for line in str(cell or "").splitlines()]
     lines = [line for line in lines if line]
     return r"\newline ".join(lines)
@@ -238,13 +292,19 @@ def table_to_latex(block: dict) -> str:
         str: LaTeX 表格环境。
     """
     rows = block.get("table", {}).get("rows", [])
+    inline_rows = block.get("table", {}).get("inline_rows", [])
     if not rows:
         return "% 空表格源块"
     col_count = max((len(row) for row in rows), default=1)
     body = []
     for index, row in enumerate(rows):
         padded = row + [""] * (col_count - len(row))
-        body.append("    " + " & ".join(table_cell_to_latex(cell) for cell in padded) + r" \\")
+        inline_row = inline_rows[index] if index < len(inline_rows) else []
+        rendered_cells = []
+        for column_index, cell in enumerate(padded):
+            inline_paragraphs = inline_row[column_index] if column_index < len(inline_row) else None
+            rendered_cells.append(table_cell_to_latex(cell, inline_paragraphs))
+        body.append("    " + " & ".join(rendered_cells) + r" \\")
         if index == 0 and len(rows) > 1:
             body.append(r"    \midrule")
 

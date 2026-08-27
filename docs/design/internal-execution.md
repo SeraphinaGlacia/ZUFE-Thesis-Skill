@@ -166,7 +166,7 @@ flowchart LR
 
 ## CLI 调用约定
 
-当前没有统一的 `zufe-thesis` 控制台入口。除 `common.py` 外，每个脚本都是可直接调用的轻量 CLI，并支持 `-h` 或 `--help`。
+当前没有统一的 `zufe-thesis` 控制台入口。除共享模块 `common.py` 和 `omml_to_latex.py` 外，每个脚本都是可直接调用的轻量 CLI，并支持 `-h` 或 `--help`。
 
 - `<skill-root>` 表示当前已加载的 `SKILL.md` 所在目录，用于定位脚本。
 - `<template-root>` 表示完整的 ZUFE-Thesis 模板根目录，传给 `--root`。
@@ -232,11 +232,12 @@ python "<skill-root>/scripts/ledger.py" --root "<template-root>" --help
 | `prepare_workspace.py` | A | 创建标准 workspace，整理输入和旧输出 |
 | `check_env.py` | A/C | 检查 Python DOCX 环境、LaTeX/Biber、QA 工具和关键包，并输出环境 issue code |
 | `prescan_docx.py` | A | 轻量预扫描 Word，提取 metadata 候选 |
-| `import_docx.py` | B | 正式抽取源块、run 级证据、源文件指纹和 unsupported features |
+| `import_docx.py` | B | 正式抽取源块、run 级证据、源文件指纹，并按原文顺序承接可转换的超链接、脚注和原生 OMML 公式；未完成项进入 unsupported features |
+| `omml_to_latex.py` | B helper | 把当前可识别的 Word 原生 OMML 结构确定性转换为 LaTeX，并报告未知节点；不作为独立 CLI |
 | `ledger.py` | B | 只读汇总或分页查询账本，并提供标题候选、Word 证据和相邻上下文 |
 | `export_assets.py` | B | 核对源文件指纹后导出 DOCX 媒体资源，并回写资源证据 |
 | `render_basicinfo.py` | B | 渲染封面、摘要、关键词和超链接隐藏设置，并验证源块字段绑定 |
-| `render_chapters.py` | B | 拒绝重复章节目标和无效图片资源，再渲染正文、表格、图片和 `mainbody.tex` |
+| `render_chapters.py` | B | 拒绝重复章节目标、无效图片资源和未决内联语义，再渲染正文、表格、图片、超链接、脚注、公式和 `mainbody.tex` |
 | `render_bib.py` | B | 全量确认后原子写入 BibTeX，存在未决项时保留旧文件 |
 | `check_flow_b_gate.py` | B | 校验动态账本、源 DOCX 指纹和最终渲染证据 |
 | `build.py` | C | 强制通过流程 B 门禁后，归档旧 PDF 并运行固定四步编译链 |
@@ -251,7 +252,7 @@ python "<skill-root>/scripts/ledger.py" --root "<template-root>" --help
 
 | tests | 主要覆盖目标 |
 | --- | --- |
-| `test_docx_import.py` | DOCX run 格式、内容控件、纯表格 Word、重复图片和源指纹 |
+| `test_docx_import.py`、`test_docx_inline_semantics.py` | DOCX 源块、图片锚点、内容控件、指纹，以及超链接、脚注和原生 OMML 公式的抽取边界 |
 | `test_template_and_workspace.py`、`test_environment.py` | 模板兼容性契约、工作区准备和环境问题分类 |
 | `test_metadata_and_basicinfo.py` | metadata 候选、字段证据、英文内容决策和 `basicinfo.tex` 写入门禁 |
 | `test_chapter_rendering.py`、`test_bibliography.py` | 标题语义、正文/图表渲染、引用改写和事务式 BibTeX |

@@ -188,11 +188,11 @@ def test_import_docx_reports_unsupported_features():
         )
         features = {feature["type"]: feature for feature in thesis["unsupported_features"]}
 
-        assert features["hyperlink"]["count"] == 1
-        assert features["equation_omml"]["count"] == 1
+        assert features["unconverted_hyperlink"]["count"] == 1
+        assert thesis["counts"]["converted_inline_features"]["equations"] == 1
         assert features["tracked_changes"]["count"] == 1
         assert features["textbox"]["count"] == 1
-        assert features["footnote_or_endnote"]["count"] == 1
+        assert features["unconverted_footnote"]["count"] == 1
         assert features["comment"]["count"] == 1
         assert features["header_footer"]["count"] == 1
         assert features["linked_image"]["count"] == 1
