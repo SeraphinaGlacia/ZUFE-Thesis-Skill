@@ -17,7 +17,7 @@ description: 当用户需要使用 ZUFE-Thesis 模板处理 Word 论文或报告
 
 ## 核心契约
 
-必须从 ZUFE-Thesis 模板根目录运行。修改任何文件前，先确认模板签名完整。
+必须从 ZUFE-Thesis 模板根目录运行。修改任何文件前，先确认模板签名、身份版本和渲染器依赖接口满足兼容性门禁。
 
 如果用户尚未准备模板项目，先说明本 Skill 依赖原始 ZUFE-Thesis LaTeX 模板，并按下面顺序处理：
 
@@ -70,7 +70,7 @@ workspace/output/qa_report.md
 
 所有可执行脚本接受 `--root`，并输出 JSON 或写入 JSON 报告。先以当前已加载的 `SKILL.md` 所在目录作为 Skill 根目录，从该目录解析 `scripts/`，再把完整的 ZUFE-Thesis 模板根目录传给 `--root`；不要假定 Skill 文件夹位于模板工作区内。高数据量命令的 stdout 只给有界摘要和完整报告路径；Agent 先读摘要，只在需要具体证据时分页查询或读取报告。正常执行优先使用已文档化的 CLI，只有调试或维护脚本时才读取源码。
 
-- `scripts/check_template.py`：检查 ZUFE-Thesis 模板签名。
+- `scripts/check_template.py`：检查 ZUFE-Thesis 模板文件、身份版本和渲染器依赖接口；只有用户明确确认后，才可用 `--confirm-compatible-template` 接受接口完整但未列入验证范围的版本。
 - `scripts/prepare_workspace.py`：创建 `workspace/`，把 DOCX 放到标准路径，并可在用户批准后归档旧输出。
 - `scripts/check_env.py`：按 `--stage` 检查 Python、`python-docx`、`xelatex`、`biber`、模板关键 TeX 包和 QA 工具；它不替代模板签名或 DOCX 可读性检查。
 - `scripts/prescan_docx.py`：流程 A 的 DOCX 轻量预扫描和 metadata 候选提取。不得生成正式 `thesis.json`。

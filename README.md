@@ -166,7 +166,7 @@ Agent 会按流程检查模板、环境、输入文件和元数据，并开始�
 ## 八、Skill 文件结构
 
 <details>
-<summary>展开查看 <code>zufe-thesis-typesetter</code> 文件结构</summary>
+<summary>展开查看 <code>zufe-thesis-typesetter</code> 安装包结构</summary>
 
 ```text
 zufe-thesis-typesetter/
@@ -198,10 +198,9 @@ zufe-thesis-typesetter/
 │   ├── render_basicinfo.py             # 基础信息渲染脚本
 │   ├── render_bib.py                   # 参考文献渲染脚本
 │   └── render_chapters.py              # 章节渲染脚本
-└── tests/
-    ├── test_regressions.py             # 回归测试脚本
-    └── test_render_chapters.py         # 渲染测试脚本
 ```
+
+仓库中的 Skill 源目录位于 `skills/zufe-thesis-typesetter/`；维护用测试位于仓库根目录 `tests/`，不会进入安装包。
 
 </details>
 

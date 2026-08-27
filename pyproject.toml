@@ -29,7 +29,7 @@ line-length = 100
 select = ["E4", "E7", "E9", "F", "I", "B", "N", "RUF100", "SIM", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
-"zufe-thesis-typesetter/tests/*.py" = ["N802"]
+"tests/*.py" = ["N802"]
 
 [tool.ruff.format]
 docstring-code-format = true
@@ -39,16 +39,16 @@ line-ending = "lf"
 addopts = [
     "--strict-config",
     "--strict-markers",
-    "--cov=zufe-thesis-typesetter/scripts",
+    "--cov=skills/zufe-thesis-typesetter/scripts",
     "--cov-branch",
     "--cov-report=term-missing:skip-covered",
 ]
-pythonpath = ["zufe-thesis-typesetter/scripts"]
-testpaths = ["zufe-thesis-typesetter/tests"]
+pythonpath = ["skills/zufe-thesis-typesetter/scripts"]
+testpaths = ["tests"]
 
 [tool.coverage.run]
 branch = true
-source = ["zufe-thesis-typesetter/scripts"]
+source = ["skills/zufe-thesis-typesetter/scripts"]
 
 [tool.coverage.report]
 fail_under = 65
@@ -56,5 +56,5 @@ show_missing = true
 skip_covered = true
 
 [tool.ty.src]
-include = ["zufe-thesis-typesetter/scripts"]
-exclude = ["zufe-thesis-typesetter/tests"]
+include = ["skills/zufe-thesis-typesetter/scripts"]
+exclude = ["tests"]

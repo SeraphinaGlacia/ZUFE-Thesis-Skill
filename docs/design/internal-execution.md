@@ -1,6 +1,6 @@
 # ZUFE-Thesis-Skill 包内部执行流程
 
-本文档说明 `zufe-thesis-typesetter/` 这个 Skill 包内部如何调动 `SKILL.md`、`references/`、`scripts/`、`tests/`，完成一次 Word 到 ZUFE-Thesis LaTeX/PDF 的转换。
+本文档说明 `skills/zufe-thesis-typesetter/` 这个 Skill 源目录如何调动 `SKILL.md`、`references/` 和 `scripts/`，完成一次 Word 到 ZUFE-Thesis LaTeX/PDF 的转换；仓库级 `tests/` 负责维护期回归验证，不进入安装包。
 
 ## 概览
 
@@ -10,7 +10,7 @@
 | `assets/metadata.example.yaml` | 提供 metadata 示例结构 | 用户或维护者需要了解输入字段时参考 |
 | `references/` | 保存流程 A/B/C、环境修复和 `thesis.json` 契约 | 进入对应阶段前读取 |
 | `scripts/` | 执行模板检查、工作区整理、DOCX 抽取、LaTeX 写入、编译、诊断和 QA | 由 Agent 按流程调度 |
-| `tests/` | 固化关键风险的回归测试 | 修改 Skill 行为或脚本后运行（备用，因为 Agent 确实可以修改 scripts） |
+| 仓库根目录 `tests/` | 固化关键风险的回归测试 | 修改 Skill 行为或脚本后运行，不随 Skill 安装 |
 
 即，Agent 负责语义判断、风险解释和用户确认；scripts 负责稳定的文件读写、抽取、渲染、编译和检查；最终格式仍然依照 ZUFE-Thesis 模板生成。
 
@@ -228,7 +228,7 @@ python "<skill-root>/scripts/ledger.py" --root "<template-root>" --help
 | script | 所属阶段 | 内部职责 |
 | --- | --- | --- |
 | `common.py` | shared | 提供 JSON、路径、归档、文件指纹、LaTeX 转义等共享工具 |
-| `check_template.py` | A | 验证模板签名，避免在错误目录写入 |
+| `check_template.py` | A | 验证模板文件、身份版本和渲染器依赖接口，避免在错误或不兼容目录写入 |
 | `prepare_workspace.py` | A | 创建标准 workspace，整理输入和旧输出 |
 | `check_env.py` | A/C | 检查 Python DOCX 环境、LaTeX/Biber、QA 工具和关键包，并输出环境 issue code |
 | `prescan_docx.py` | A | 轻量预扫描 Word，提取 metadata 候选 |
@@ -251,17 +251,22 @@ python "<skill-root>/scripts/ledger.py" --root "<template-root>" --help
 
 | tests | 主要覆盖目标 |
 | --- | --- |
-| `test_regressions.py` | DOCX run 格式、内容控件、纯表格 Word、重复图片、源指纹、环境提示、basicinfo 完整承接、标题语义结论、章节/图片门禁、事务式 BibTeX、构建绑定、源码/PDF QA 和人工复核状态 |
-| `test_render_chapters.py` | 章节标题层级渲染 |
+| `test_docx_import.py` | DOCX run 格式、内容控件、纯表格 Word、重复图片和源指纹 |
+| `test_template_and_workspace.py`、`test_environment.py` | 模板兼容性契约、工作区准备和环境问题分类 |
+| `test_metadata_and_basicinfo.py` | metadata 候选、字段证据、英文内容决策和 `basicinfo.tex` 写入门禁 |
+| `test_chapter_rendering.py`、`test_bibliography.py` | 标题语义、正文/图表渲染、引用改写和事务式 BibTeX |
+| `test_flow_b_gate_and_cli.py` | 账本结构、指纹、渲染证据、分页 CLI 和流程 B 最终门禁 |
+| `test_build_and_diagnosis.py`、`test_qa.py` | 构建绑定、失败分类、源码/PDF QA 和人工视觉复核状态 |
+| `support.py` | 仅保存测试共享路径和最小夹具，不包含运行时逻辑 |
 
 ### 维护者验证命令
 
-仓库根目录的 `pyproject.toml`、`.python-version` 和 `uv.lock` 只服务脚本开发与回归验证，不属于 Skill 用户运行依赖，也不会改变仅打包 `zufe-thesis-typesetter/` 的 Release 边界。
+仓库根目录的 `pyproject.toml`、`.python-version`、`uv.lock` 和 `tests/` 只服务脚本开发与回归验证，不属于 Skill 用户运行依赖。Release 从 `skills/zufe-thesis-typesetter/` 取源文件，但 ZIP 顶层仍是 `zufe-thesis-typesetter/`。
 
 ```bash
 uv sync
-uv run ruff check zufe-thesis-typesetter/scripts zufe-thesis-typesetter/tests
-uv run ruff format --check zufe-thesis-typesetter/scripts zufe-thesis-typesetter/tests
+uv run ruff check skills/zufe-thesis-typesetter/scripts tests
+uv run ruff format --check skills/zufe-thesis-typesetter/scripts tests
 uv run ty check
 uv run pytest
 ```
