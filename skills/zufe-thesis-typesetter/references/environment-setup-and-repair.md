@@ -22,21 +22,67 @@
 
 第一版不要求 `PyYAML`。`metadata.yaml` 由 skill 内置的轻量解析逻辑读取。
 
-### Python 包安装超时与镜像策略
+### 先绑定目标环境和依赖管理方式
 
-安装 Python 包前必须确认用户允许 Agent 修改当前 Python 环境。安装时优先使用短超时默认源：
+先执行 SOP 中的只读诊断，核对 `environment.root`、`project_root`、`python`、`prefix` 和 `declarations`。
+下面的 `TARGET_PYTHON` 是结果中的解释器绝对路径，`TARGET_PROJECT` 是管理依赖的项目根目录；
+它们都不是 Skill 源码目录。示例使用 POSIX shell；PowerShell 使用 `$env:UV_PROJECT_ENVIRONMENT`
+设置同一环境，调用带空格的解释器路径时使用 `&`。
+
+安装前确认已有授权涵盖目标环境和声明变更。没有授权时先给出具体修复命令；诊断本身不运行安装。
+所有平台均先按管理器分支选择，不能一律 `pip install`。
+
+#### uv 项目
+
+由 `uv.lock`、`uv.toml` 或 `[tool.uv]` 确认，读取目标 `pyproject.toml`，核对依赖属于常规依赖、
+dependency group 还是 extra。已有声明时同步相应集合，已有锁文件加 `--locked`：
 
 ```bash
-python -m pip install --timeout 8 --retries 1 python-docx
+env UV_PROJECT_ENVIRONMENT="/目标项目/.venv" uv sync \
+  --project "$TARGET_PROJECT" --python "$TARGET_PYTHON" \
+  --no-python-downloads --locked --inexact
+```
+
+非默认 group/extra 补 `--group <组名>` / `--extra <名称>`；不要通过重复 `uv add` 绕过分组。
+`--inexact` 保留环境中额外安装的包；锁文件过期时先报告，不自动移除 `--locked` 或重建环境。
+项目本来没有锁文件时，说明同步会创建锁文件，获相应授权后省略 `--locked`。
+
+只有未声明且任务需要持久使用时才添加，按项目约定决定是否加 `--group` 或 `--optional`：
+
+```bash
+env UV_PROJECT_ENVIRONMENT="/目标项目/.venv" uv add \
+  --project "$TARGET_PROJECT" --python "$TARGET_PYTHON" --no-python-downloads python-docx
+```
+
+这里的环境路径必须等于诊断中的 `prefix`；自定义环境同样绑定其绝对路径。
+`uv add` 会更新该项目的声明和锁文件，不能对 Skill 开发仓库执行。
+uv 不要求目标环境里有 pip。若 uv 命令不可见，先定位已有 uv，而非 `ensurepip`。
+依据：[uv 项目环境](https://docs.astral.sh/uv/concepts/projects/config/#project-environment-path)、
+[uv sync](https://docs.astral.sh/uv/reference/cli/#uv-sync)。
+
+#### 其他项目与普通环境
+
+Conda、Poetry、PDM 项目优先遵循既有声明与管理器，先确认它实际操作的环境对应 `prefix`；
+单独一个 `pyproject.toml` 不足以证明使用 uv，也不能据此自动迁移。
+requirements 项目已有声明时，使用同一解释器的安装器按该文件安装；未声明时再按任务补充声明。
+
+普通 venv 中 pip 可用时，短超时尝试默认源：
+
+```bash
+"$TARGET_PYTHON" -m pip install --timeout 8 --retries 1 python-docx
 ```
 
 如果首次命令失败、超时或长时间无响应，第二次应自动改用中国大陆镜像：
 
 ```bash
-python -m pip install --timeout 15 --retries 2 -i https://pypi.tuna.tsinghua.edu.cn/simple python-docx
+"$TARGET_PYTHON" -m pip install --timeout 15 --retries 2 -i https://pypi.tuna.tsinghua.edu.cn/simple python-docx
 ```
 
 不要在未获用户批准时永久修改 pip 全局配置。镜像源优先作为单次安装命令参数使用。
+
+没有 pip 但已有 uv 时，可用 `uv pip install --python "$TARGET_PYTHON" python-docx`，
+不必先把 pip 装进环境。两种安装器都不可用时先定位既有管理器；仅普通 venv 确需 pip 时
+考虑 `"$TARGET_PYTHON" -m ensurepip`。docx 可导入时无须做这些修复。
 
 ### 命令层
 
@@ -167,7 +213,7 @@ InitFile/schoolLogo.png
 5. 只有具体文件缺失时，才补装对应 TeX 包。
 6. BasicTeX 修复成本过高或反复失败时，才建议 MacTeX 完整安装。
 
-常用检查命令：
+常用检查命令（`python` 替换为已确认的目标解释器）：
 
 ```bash
 python -c "import sys; print(sys.version)"
@@ -180,14 +226,7 @@ kpsewhich biblatex.sty
 kpsewhich gb7714-2015.bbx
 ```
 
-Python 包缺失时，在用户当前 Python 环境中修复：
-
-```bash
-python -m pip install --timeout 8 --retries 1 python-docx
-python -m pip install --timeout 15 --retries 2 -i https://pypi.tuna.tsinghua.edu.cn/simple python-docx
-```
-
-第二条命令只在第一条失败、超时或无响应后执行。
+Python 包缺失时，按上面的管理器分支修复同一目标环境；uv 项目使用 uv，同步或添加依赖前先核对声明。
 
 BasicTeX 已安装但命令不可见时，优先检查 PATH：
 
@@ -226,7 +265,7 @@ MacTeX 体积较大，只能作为用户明确批准后的兜底方案。
 5. 用 `kpsewhich` 检查模板核心 TeX 文件。
 6. 编译失败时按日志补装具体包，不做全局猜测。
 
-常用检查命令：
+常用检查命令（`python` 替换为已确认的目标解释器）：
 
 ```powershell
 python --version
@@ -241,14 +280,7 @@ kpsewhich biblatex.sty
 kpsewhich gb7714-2015.bbx
 ```
 
-Python 包缺失时，在用户当前 Python 环境中修复：
-
-```powershell
-python -m pip install --timeout 8 --retries 1 python-docx
-python -m pip install --timeout 15 --retries 2 -i https://pypi.tuna.tsinghua.edu.cn/simple python-docx
-```
-
-第二条命令只在第一条失败、超时或无响应后执行。
+Python 包缺失时，按上面的管理器分支修复同一目标环境；uv 项目使用 uv，同步或添加依赖前先核对声明。
 
 Windows 优先建议 MiKTeX，因为它对非技术用户更容易处理缺包。安装或修复 MiKTeX 时应确认：
 
@@ -265,7 +297,7 @@ Windows 上 PATH 问题常见。若 `xelatex` 已安装但 `where xelatex` 找�
 
 先确认当前环境是完整主机、容器还是受限云沙箱。不要假设有管理员权限、持久磁盘或图形界面。
 
-最小检查命令：
+最小检查命令（`python3` 替换为已确认的目标解释器）：
 
 ```bash
 python3 --version
@@ -301,6 +333,10 @@ kpsewhich gb7714-2015.bbx
 ## 修复后验证策略
 
 环境修复后必须重新验证，而不是直接继续。
+
+所有复查先执行诊断返回的完整 `verify_command`，不要重新用 PATH 中的另一套 Python。
+下列简写中的 `python` / `python3` 均代表同一 `environment.python`，`.` 必须替换为原始绝对模板路径，
+有独立依赖工作区时保留 `--project-root`。
 
 Python 层修复后运行：
 

@@ -72,7 +72,7 @@ workspace/output/qa_report.md
 
 - `scripts/check_template.py`：检查 ZUFE-Thesis 模板文件、身份版本和渲染器依赖接口；只有用户明确确认后，才可用 `--confirm-compatible-template` 接受接口完整但未列入验证范围的版本。
 - `scripts/prepare_workspace.py`：创建 `workspace/`，把 DOCX 放到标准路径，并可在用户批准后归档旧输出。
-- `scripts/check_env.py`：按 `--stage` 检查 Python、`python-docx`、`xelatex`、`biber`、模板关键 TeX 包和 QA 工具；它不替代模板签名或 DOCX 可读性检查。
+- `scripts/check_env.py`：按 `--stage` 检查 Python、`python-docx`、`xelatex`、`biber`、模板关键 TeX 包和 QA 工具；从 `--root` 识别依赖管理方式，模板属于其他依赖工作区时显式加 `--project-root`。先选目标项目的现有解释器，不为诊断同步或重建环境；缺 pip 本身不阻塞。它不替代模板签名或 DOCX 可读性检查。
 - `scripts/prescan_docx.py`：流程 A 的 DOCX 轻量预扫描和 metadata 候选提取。不得生成正式 `thesis.json`。
 - `scripts/import_docx.py`：流程 B 正式抽取，按原文顺序记录普通 run、可转换的超链接、脚注和原生 OMML 公式，并生成 `thesis.json` 和 `extracted.md`。
 - `scripts/ledger.py`：只读汇总、分页查询源块并生成带前后文的标题候选大纲；不得用它绕过 Agent 的语义判断。
